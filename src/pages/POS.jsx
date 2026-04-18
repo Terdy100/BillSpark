@@ -179,7 +179,7 @@ export default function POS() {
   };
 
   return (
-    <div className="flex h-full gap-6 bg-slate-50/50 -m-8 p-8 min-h-[calc(100vh-4rem)] relative">
+    <div className="flex flex-col lg:flex-row h-full gap-4 lg:gap-6 bg-slate-50/50 -m-4 p-4 lg:-m-8 lg:p-8 min-h-[calc(100vh-4rem)] relative">
       
       {/* Toast Feedback */}
       {scanFeedback && (
@@ -197,7 +197,7 @@ export default function POS() {
       )}
 
       {/* Left Area: POS Register */}
-      <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="w-full lg:flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden order-2 lg:order-1 mt-4 lg:mt-0">
         
         {/* Tabs */}
         <div className="flex bg-slate-100 p-2 gap-2 border-b border-slate-200 overflow-x-auto">
@@ -309,7 +309,7 @@ export default function POS() {
       </div>
 
       {/* Right Area: Products & Scanning */}
-      <div className="w-[400px] flex flex-col gap-6">
+      <div className="w-full lg:w-[400px] flex flex-col gap-4 lg:gap-6 order-1 lg:order-2">
         
         {/* Actions */}
         <div className="grid grid-cols-2 gap-4">
@@ -334,7 +334,7 @@ export default function POS() {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-3xl p-4 shadow-sm overflow-auto">
+        <div className="h-[40vh] lg:h-auto lg:flex-1 bg-white border border-slate-200 rounded-3xl p-4 shadow-sm overflow-auto">
           <div className="grid grid-cols-2 gap-3">
             {products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())).map(product => (
               <button 
