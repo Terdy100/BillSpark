@@ -1,107 +1,55 @@
-import React, { useEffect, useState, useRef } from 'react';
-import Quagga from '@ericblade/quagga2';
-import { Flashlight, FlashlightOff } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode" }) {
   const [initError, setInitError] = useState(null);
-  const [torchOn, setTorchOn] = useState(false);
-  const [hasTorch, setHasTorch] = useState(false);
-  const videoTrackRef = useRef(null);
+  const [debugDetected, setDebugDetected] = useState(null); // Visual proof state
 
   useEffect(() => {
     let isMounted = true;
+    let html5QrCode = null;
 
-    // 4. Reduce Resolution (640x480 is 4x faster to process than HD)
-    Quagga.init({
-      inputStream: {
-        name: "Live",
-        type: "LiveStream",
-        target: document.querySelector('#scanner-camera'),
-        constraints: {
-          width: 640,
-          height: 480,
-          facingMode: "environment"
-        },
-        // 2. Limit Scan Area (Massively increases speed by ignoring background)
-        area: {
-          top: "25%",
-          bottom: "25%",
-          left: "10%",
-          right: "10%"
-        }
-      },
-      decoder: {
-        readers: [
-          "ean_reader",
-          "ean_8_reader",
-          "upc_reader",
-          "upc_e_reader"
-        ],
-        multiple: false
-      },
-      locate: true,
-      locator: {
-        halfSample: true,
-        patchSize: "medium", // smaller patch sizes increase FPS on phones
-      }
-    }, function(err) {
-      if (err) {
-        console.error(err);
-        if (isMounted) setInitError(err.message || 'Camera failed to start.');
-        return;
-      }
-      if (isMounted) {
-        Quagga.start();
-        
-        // 5. Get access to the physical camera track for Flashlight control
-        const track = Quagga.CameraAccess.getActiveTrack();
-        if (track) {
-          videoTrackRef.current = track;
-          const capabilities = track.getCapabilities && track.getCapabilities();
-          if (capabilities && capabilities.torch) {
-            setHasTorch(true);
+    import('html5-qrcode').then(({ Html5Qrcode }) => {
+      if (!isMounted) return;
+      
+      html5QrCode = new Html5Qrcode("scanner-camera");
+
+      const config = {
+        fps: 20, // max fps
+        qrbox: { width: 300, height: 150 },
+      };
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          if (isMounted) {
+            // SHOW MASSIVE GREEN SUCCESS SCREEN INSTANTLY
+            setDebugDetected(decodedText);
+            if (navigator.vibrate) navigator.vibrate(200);
+            
+            html5QrCode.stop().then(() => {
+              // Wait 1.5 seconds so user physically views validation
+              setTimeout(() => {
+                onScan(decodedText.trim());
+              }, 1500); 
+            });
           }
+        },
+        (errorMsg) => {
+          // Ignore general tracking errors
         }
-      }
+      ).catch((err) => {
+        if (isMounted) setInitError(err.message || 'Camera failed to start.');
+      });
     });
-
-    const onDetect = (result) => {
-      const code = result.codeResult.code;
-      if (code && isMounted) {
-        if (code.length >= 8) {
-          // 6. Beep + Freeze + Vibrate on Success
-          if (navigator.vibrate) navigator.vibrate(200);
-          Quagga.stop();
-          onScan(code);
-        }
-      }
-    };
-
-    Quagga.onDetected(onDetect);
 
     return () => {
       isMounted = false;
-      Quagga.offDetected(onDetect);
-      Quagga.stop();
-      if (videoTrackRef.current && torchOn) {
-        try { videoTrackRef.current.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {}
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(() => {});
       }
     };
   }, [onScan]);
-
-  const toggleTorch = async () => {
-    if (videoTrackRef.current && hasTorch) {
-      try {
-        const newTorchState = !torchOn;
-        await videoTrackRef.current.applyConstraints({
-          advanced: [{ torch: newTorchState }]
-        });
-        setTorchOn(newTorchState);
-      } catch (err) {
-        console.warn("Failed to toggle flashlight", err);
-      }
-    }
-  };
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
@@ -111,13 +59,26 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4 animate-in fade-in">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes sweep {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .laser-sweep { animation: sweep 2.5s ease-in-out infinite; }
+      `}} />
+
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg relative flex flex-col h-full max-h-[90vh] overflow-hidden border border-slate-200">
         
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50">
           <div>
             <h3 className="font-black text-2xl text-slate-800">{title}</h3>
-            <p className="text-slate-500 font-bold text-sm">Center barcode in the red box</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+              <p className="text-slate-500 font-bold text-xs uppercase tracking-wider">Free Engine v3.0</p>
+            </div>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 font-bold px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors">
             Close
@@ -125,35 +86,36 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         </div>
         
         {/* Camera Container */}
-        <div className="w-full flex-1 bg-black relative flex items-center justify-center min-h-[40vh]">
+        <div className="w-full flex-1 bg-black relative flex items-center justify-center min-h-[40vh] overflow-hidden">
+          
+          {/* INSTANT VISUAL PROOF SCREEN */}
+          {debugDetected && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/90 backdrop-blur-md animate-in zoom-in duration-300">
+              <div className="text-center text-white scale-110">
+                <h2 className="text-5xl font-black mb-4 drop-shadow-lg">DETECTED!</h2>
+                <div className="bg-black/30 p-6 rounded-2xl border-4 border-white/40 backdrop-blur-xl">
+                  <p className="text-4xl font-black tracking-widest">{debugDetected}</p>
+                </div>
+                <p className="mt-4 font-bold text-green-100 animate-pulse">Checking database...</p>
+              </div>
+            </div>
+          )}
+
           {initError ? (
             <div className="text-red-400 font-bold text-center px-8 z-10">
               Camera Error: <br/> {initError}
             </div>
           ) : (
             <>
-              {/* Quagga Video Canvas Injection Point */}
-              <div 
-                id="scanner-camera"
-                className="w-full h-full absolute inset-0 [&>video]:w-full [&>video]:h-full [&>video]:object-cover [&>canvas]:hidden"
-              ></div>
+              {/* HTML5-QRCode Target */}
+              <div id="scanner-camera" className="w-full h-full absolute inset-0 [&>video]:w-full [&>video]:h-full [&>video]:object-cover"></div>
               
-              {/* Scan Zone UI (Matches the area constrain above) */}
+              {/* Scan Zone UI */}
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/40">
-                <div className="w-4/5 h-48 border-[6px] border-white/80 rounded-3xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center bg-transparent">
-                  <div className="absolute left-4 right-4 h-1 bg-red-500/90 shadow-[0_0_20px_rgba(239,68,68,1)] animate-pulse rounded-full"></div>
+                <div className="w-[300px] h-[150px] border-[4px] border-white/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center bg-transparent overflow-hidden">
+                  <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_20px_rgba(239,68,68,1)] laser-sweep rounded-full"></div>
                 </div>
               </div>
-
-              {/* Flashlight Toggle */}
-              {hasTorch && (
-                <button 
-                  onClick={toggleTorch}
-                  className={`absolute bottom-6 right-6 p-4 rounded-full shadow-2xl transition-all ${torchOn ? 'bg-yellow-400 text-yellow-900' : 'bg-slate-800/80 text-white border border-white/20 backdrop-blur-md'}`}
-                >
-                  {torchOn ? <Flashlight size={24} /> : <FlashlightOff size={24} />}
-                </button>
-              )}
             </>
           )}
         </div>
