@@ -32,25 +32,38 @@ export const getAudioState = () => isAudioEnabled && audioCtx && audioCtx.state 
 export const playBeep = () => {
   try {
     if (!audioCtx || audioCtx.state === 'suspended') {
-      // Audio not initialized or suspended
       return;
     }
     
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
+    const now = audioCtx.currentTime;
     
-    // Classic checkout beep: short and slightly high pitched square wave
-    oscillator.type = 'square';
-    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
+    // Play a shiny, modern success chime (two tones quickly, like a subtle bell)
+    const playTone = (freq, type, startTime, duration, vol) => {
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(vol, startTime + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.00001, startTime + duration);
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+
+    // First note (ding)
+    playTone(1046.50, 'sine', now, 0.2, 0.3); // C6
+    playTone(2093.00, 'sine', now, 0.2, 0.1); // C7 (harmonic)
     
-    gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    
-    oscillator.start(audioCtx.currentTime);
-    oscillator.stop(audioCtx.currentTime + 0.1);
+    // Second note higher (ding!)
+    playTone(1318.51, 'sine', now + 0.08, 0.4, 0.3); // E6
+    playTone(2637.02, 'sine', now + 0.08, 0.4, 0.1); // E7 (harmonic)
+
   } catch (e) {
     console.error("Audio beep failed", e);
   }

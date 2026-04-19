@@ -210,14 +210,14 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         {/* Fallback Entry */}
         <div className="px-6 py-6 border-t border-slate-100 bg-white">
           <p className="text-slate-400 font-bold mb-3 text-xs uppercase tracking-wider text-center">Or type manually</p>
-          <form onSubmit={handleManualSubmit} className="flex gap-2">
+          <form onSubmit={handleManualSubmit} className="flex gap-2 w-full overflow-hidden">
             <input 
               type="text" 
               name="manualCode"
               placeholder="Enter barcode..." 
-              className="flex-1 px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-lg text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 placeholder:font-bold placeholder:text-slate-300"
+              className="flex-1 min-w-0 px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-lg text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 placeholder:font-bold placeholder:text-slate-300"
             />
-            <button type="submit" className="px-8 py-4 bg-slate-800 hover:bg-slate-900 text-white font-black text-lg rounded-2xl shadow-lg transition-all active:scale-95">
+            <button type="submit" className="flex-shrink-0 px-6 sm:px-8 py-4 bg-slate-800 hover:bg-slate-900 text-white font-black text-lg rounded-2xl shadow-lg transition-all active:scale-95">
               Add
             </button>
           </form>
