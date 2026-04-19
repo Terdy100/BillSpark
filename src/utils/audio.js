@@ -1,6 +1,41 @@
+let audioCtx = null;
+let isAudioEnabled = false;
+
+export const initAudio = () => {
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    isAudioEnabled = true;
+
+    // play a short silent sound to unlock audio on mobile browsers
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(0);
+    osc.stop(audioCtx.currentTime + 0.01);
+    
+    return true;
+  } catch (e) {
+    console.error("Audio init failed", e);
+    return false;
+  }
+};
+
+export const getAudioState = () => isAudioEnabled && audioCtx && audioCtx.state === 'running';
+
 export const playBeep = () => {
   try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx || audioCtx.state === 'suspended') {
+      // Audio not initialized or suspended
+      return;
+    }
+    
     const oscillator = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
     

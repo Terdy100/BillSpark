@@ -1,60 +1,95 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 
-export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode" }) {
+export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode", continuous = false }) {
   const [initError, setInitError] = useState(null);
-  const [debugDetected, setDebugDetected] = useState(null); // Visual proof state
+  const [scanHistory, setScanHistory] = useState([]); // Track all scans in continuous mode
+  const [lastDetected, setLastDetected] = useState(null); // Current flash feedback
+  const scannerRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const cooldownRef = useRef(false); // Prevent rapid duplicate scans
+
+  const startScanning = useCallback((html5QrCode) => {
+    const config = {
+      fps: 20,
+      qrbox: { width: 300, height: 150 },
+    };
+
+    html5QrCode.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText) => {
+        if (!isMountedRef.current || cooldownRef.current) return;
+
+        const code = decodedText.trim();
+        
+        // Cooldown to prevent the same barcode being scanned 10x in 1 second
+        cooldownRef.current = true;
+
+        // Vibrate + show feedback
+        if (navigator.vibrate) navigator.vibrate(200);
+        setLastDetected(code);
+
+        if (continuous) {
+          // In continuous mode: add to history, fire callback, then resume after brief flash
+          setScanHistory(prev => [{ code, timestamp: Date.now() }, ...prev]);
+          onScan(code);
+
+          // Clear the flash after 1.2 seconds, allow next scan
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              setLastDetected(null);
+              cooldownRef.current = false;
+            }
+          }, 1200);
+        } else {
+          // Original behavior: stop scanner, show detection, then fire callback
+          html5QrCode.stop().then(() => {
+            setTimeout(() => {
+              onScan(code);
+            }, 1500);
+          });
+        }
+      },
+      (errorMsg) => {
+        // Ignore general tracking errors
+      }
+    ).catch((err) => {
+      if (isMountedRef.current) setInitError(err.message || 'Camera failed to start.');
+    });
+  }, [onScan, continuous]);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
     let html5QrCode = null;
 
     import('html5-qrcode').then(({ Html5Qrcode }) => {
-      if (!isMounted) return;
+      if (!isMountedRef.current) return;
       
       html5QrCode = new Html5Qrcode("scanner-camera");
-
-      const config = {
-        fps: 20, // max fps
-        qrbox: { width: 300, height: 150 },
-      };
-
-      html5QrCode.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-          if (isMounted) {
-            // SHOW MASSIVE GREEN SUCCESS SCREEN INSTANTLY
-            setDebugDetected(decodedText);
-            if (navigator.vibrate) navigator.vibrate(200);
-            
-            html5QrCode.stop().then(() => {
-              // Wait 1.5 seconds so user physically views validation
-              setTimeout(() => {
-                onScan(decodedText.trim());
-              }, 1500); 
-            });
-          }
-        },
-        (errorMsg) => {
-          // Ignore general tracking errors
-        }
-      ).catch((err) => {
-        if (isMounted) setInitError(err.message || 'Camera failed to start.');
-      });
+      scannerRef.current = html5QrCode;
+      startScanning(html5QrCode);
     });
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       if (html5QrCode && html5QrCode.isScanning) {
         html5QrCode.stop().catch(() => {});
       }
     };
-  }, [onScan]);
+  }, [startScanning]);
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
     const val = e.target.manualCode.value.trim();
-    if (val) onScan(val);
+    if (val) {
+      if (continuous) {
+        setScanHistory(prev => [{ code: val, timestamp: Date.now() }, ...prev]);
+        onScan(val);
+        e.target.manualCode.value = '';
+      } else {
+        onScan(val);
+      }
+    }
   };
 
   return (
@@ -67,6 +102,17 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
           100% { top: 100%; opacity: 0; }
         }
         .laser-sweep { animation: sweep 2.5s ease-in-out infinite; }
+        @keyframes flashIn {
+          0% { transform: scale(0.8); opacity: 0; }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .flash-in { animation: flashIn 0.3s ease-out; }
+        @keyframes slideUp {
+          from { transform: translateY(10px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .slide-up { animation: slideUp 0.3s ease-out; }
       `}} />
 
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg relative flex flex-col h-full max-h-[90vh] overflow-hidden border border-slate-200">
@@ -77,24 +123,46 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             <h3 className="font-black text-2xl text-slate-800">{title}</h3>
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-              <p className="text-slate-500 font-bold text-xs uppercase tracking-wider">Free Engine v3.0</p>
+              <p className="text-slate-500 font-bold text-xs uppercase tracking-wider">
+                {continuous ? 'Continuous Mode — Keep Scanning' : 'Free Engine v3.0'}
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-800 font-bold px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors">
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            {continuous && scanHistory.length > 0 && (
+              <span className="px-3 py-1.5 bg-blue-100 text-blue-700 font-black rounded-full text-sm">
+                {scanHistory.length} scanned
+              </span>
+            )}
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-800 font-bold px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors">
+              {continuous ? 'Done' : 'Close'}
+            </button>
+          </div>
         </div>
         
         {/* Camera Container */}
         <div className="w-full flex-1 bg-black relative flex items-center justify-center min-h-[40vh] overflow-hidden">
           
-          {/* INSTANT VISUAL PROOF SCREEN */}
-          {debugDetected && (
+          {/* SCAN FEEDBACK FLASH (continuous mode — quick green flash with code) */}
+          {lastDetected && continuous && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none flash-in">
+              <div className="absolute inset-0 bg-green-500/30 backdrop-blur-[2px]"></div>
+              <div className="relative text-center z-10">
+                <div className="bg-green-500 text-white px-8 py-4 rounded-2xl shadow-2xl border-2 border-white/40">
+                  <p className="text-xl font-black tracking-wide">✓ SCANNED</p>
+                  <p className="text-lg font-bold mt-1 opacity-90">{lastDetected}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ORIGINAL DETECTED SCREEN (single-scan mode) */}
+          {lastDetected && !continuous && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/90 backdrop-blur-md animate-in zoom-in duration-300">
               <div className="text-center text-white scale-110">
                 <h2 className="text-5xl font-black mb-4 drop-shadow-lg">DETECTED!</h2>
                 <div className="bg-black/30 p-6 rounded-2xl border-4 border-white/40 backdrop-blur-xl">
-                  <p className="text-4xl font-black tracking-widest">{debugDetected}</p>
+                  <p className="text-4xl font-black tracking-widest">{lastDetected}</p>
                 </div>
                 <p className="mt-4 font-bold text-green-100 animate-pulse">Checking database...</p>
               </div>
@@ -115,10 +183,29 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
                 <div className="w-[300px] h-[150px] border-[4px] border-white/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center bg-transparent overflow-hidden">
                   <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_20px_rgba(239,68,68,1)] laser-sweep rounded-full"></div>
                 </div>
+                {continuous && (
+                  <p className="mt-4 text-white/80 font-bold text-sm bg-black/50 px-4 py-2 rounded-full">
+                    Point at next item — scanning continuously
+                  </p>
+                )}
               </div>
             </>
           )}
         </div>
+
+        {/* Scan History (continuous mode) */}
+        {continuous && scanHistory.length > 0 && (
+          <div className="max-h-[120px] overflow-auto border-t border-slate-100 bg-green-50/50">
+            <div className="px-4 py-2 space-y-1">
+              {scanHistory.slice(0, 10).map((scan, i) => (
+                <div key={scan.timestamp + i} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-white/60 slide-up">
+                  <span className="font-bold text-slate-700">✓ {scan.code}</span>
+                  <span className="text-slate-400 text-xs font-bold">just now</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         {/* Fallback Entry */}
         <div className="px-6 py-6 border-t border-slate-100 bg-white">

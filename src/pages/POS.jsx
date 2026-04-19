@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, saveSaleOffline } from '../lib/offline';
 import { Search, ScanLine, Plus, Trash2, CreditCard, Banknote, PauseCircle, ShoppingCart } from 'lucide-react';
-import { playBeep } from '../utils/audio';
+import { playBeep, initAudio, getAudioState } from '../utils/audio';
 import BarcodeScanner from '../components/BarcodeScanner';
 
 export default function POS() {
@@ -15,6 +15,12 @@ export default function POS() {
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanFeedback, setScanFeedback] = useState(null);
+  const [audioEnabled, setAudioEnabled] = useState(getAudioState());
+
+  const handleEnableAudio = () => {
+    initAudio();
+    setAudioEnabled(getAudioState());
+  };
 
   const showFeedback = (msg, isSuccess) => {
     setScanFeedback({ message: msg, type: isSuccess ? 'success' : 'error' });
@@ -75,7 +81,7 @@ export default function POS() {
     console.log("Scanned:", scannedCode);
     
     try { playBeep(); } catch (e) { console.warn('Beep error', e); }
-    setIsScanning(false);
+    // Don't close scanner — continuous mode keeps it open
 
     const product = products.find(p => p.barcode === scannedCode || p.sku === scannedCode);
     if (product) {
@@ -179,7 +185,17 @@ export default function POS() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full gap-4 lg:gap-6 bg-slate-50/50 -m-4 p-4 lg:-m-8 lg:p-8 min-h-[calc(100vh-4rem)] relative">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 bg-slate-50/50 -m-4 p-4 lg:-m-8 lg:p-8 min-h-[calc(100vh-4rem)] relative">
+      
+      {/* Audio Enable Prompt */}
+      {!audioEnabled && (
+        <div className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 px-6 py-4 bg-slate-800 text-white rounded-2xl shadow-2xl z-[90] flex flex-col gap-3 animate-in fade-in slide-in-from-bottom border border-slate-700">
+          <p className="font-bold text-sm text-slate-300">Scanner Beep</p>
+          <button onClick={handleEnableAudio} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all">
+            Enable Sound
+          </button>
+        </div>
+      )}
       
       {/* Toast Feedback */}
       {scanFeedback && (
@@ -188,11 +204,13 @@ export default function POS() {
         </div>
       )}
 
-      {/* Scanner Overlay */}
+      {/* Scanner Overlay — Continuous Mode */}
       {isScanning && (
         <BarcodeScanner 
           onScan={handleScanSuccess} 
-          onClose={() => setIsScanning(false)} 
+          onClose={() => setIsScanning(false)}
+          continuous={true}
+          title="Scan Items"
         />
       )}
 
