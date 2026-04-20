@@ -193,7 +193,7 @@ export default function POS() {
       )}
 
       {isScanning && (
-        <BarcodeScanner onScan={handleScanSuccess} onClose={() => setIsScanning(false)} />
+        <BarcodeScanner onScan={handleScanSuccess} onClose={() => setIsScanning(false)} continuous={true} />
       )}
 
       {/* Shopping Baskets Area */}

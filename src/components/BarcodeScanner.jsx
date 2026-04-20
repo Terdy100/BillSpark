@@ -34,20 +34,20 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
           setScanHistory(prev => [{ code, timestamp: Date.now() }, ...prev]);
           onScan(code);
 
-          // Clear the flash after 1.2 seconds, allow next scan
+          // Clear the flash after 600ms, allow next scan
           setTimeout(() => {
             if (isMountedRef.current) {
               setLastDetected(null);
               cooldownRef.current = false;
             }
-          }, 1200);
+          }, 600);
         } else {
-          // Original behavior: stop scanner, show detection, then fire callback
-          html5QrCode.stop().then(() => {
-            setTimeout(() => {
-              onScan(code);
-            }, 1500);
-          });
+          // Fire callback immediately and show brief flash
+          setLastDetected(code);
+          onScan(code);
+          setTimeout(() => {
+            if (isMountedRef.current) setLastDetected(null);
+          }, 800);
         }
       },
       (errorMsg) => {
@@ -156,15 +156,13 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             </div>
           )}
 
-          {/* ORIGINAL DETECTED SCREEN (single-scan mode) */}
           {lastDetected && !continuous && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/90 backdrop-blur-md animate-in zoom-in duration-300">
-              <div className="text-center text-white scale-110">
-                <h2 className="text-5xl font-black mb-4 drop-shadow-lg">DETECTED!</h2>
-                <div className="bg-black/30 p-6 rounded-2xl border-4 border-white/40 backdrop-blur-xl">
-                  <p className="text-4xl font-black tracking-widest">{lastDetected}</p>
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/80 backdrop-blur-sm animate-in zoom-in duration-150">
+              <div className="text-center text-white">
+                <h2 className="text-3xl font-black mb-2 uppercase">Detected</h2>
+                <div className="bg-black/20 px-6 py-3 rounded-2xl border-2 border-white/40">
+                  <p className="text-2xl font-black">{lastDetected}</p>
                 </div>
-                <p className="mt-4 font-bold text-green-100 animate-pulse">Checking database...</p>
               </div>
             </div>
           )}

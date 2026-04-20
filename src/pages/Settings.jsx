@@ -180,19 +180,13 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="pt-8 border-t border-slate-100">
-                <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
-                  <div className="flex items-center gap-3 text-red-600 mb-3">
+              <div className="pt-8 border-t border-slate-100 opacity-50 grayscale pointer-events-none">
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                  <div className="flex items-center gap-3 text-slate-400 mb-3">
                     <AlertCircle size={24} />
-                    <h4 className="font-black">Danger Zone</h4>
+                    <h4 className="font-black">Database Maintenance</h4>
                   </div>
-                  <p className="text-red-700/70 text-sm font-bold mb-6">Clearing local data will permanently remove all transactions and basket history from this device. Sync your data first!</p>
-                  <button 
-                    onClick={clearLocalData}
-                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl shadow-lg shadow-red-600/20 transition-all text-sm"
-                  >
-                    Clear Local Database
-                  </button>
+                  <p className="text-slate-400 text-sm font-bold mb-6">Database clearing is restricted for audit and security purposes.</p>
                 </div>
               </div>
             </div>

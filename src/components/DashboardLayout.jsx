@@ -31,17 +31,29 @@ export default function DashboardLayout() {
   }, [darkMode]);
 
   useEffect(() => {
-    const handleOnline = async () => {
-      setIsOnline(true);
-      // Auto-sync when coming back online
-      const { syncData } = await import('../lib/sync');
-      console.log('Detected online status, starting auto-sync...');
-      await syncData();
+    const triggerSync = async () => {
+      if (navigator.onLine) {
+        try {
+          const { syncData } = await import('../lib/sync');
+          await syncData();
+        } catch (e) {
+          console.error('Auto-sync error:', e);
+        }
+      }
     };
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      triggerSync();
+    };
+    
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    // Initial sync on mount
+    triggerSync();
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -55,17 +67,17 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen bg-slate-50 overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-screen bg-bg-base overflow-hidden">
       
       {/* Mobile Top App Bar */}
-      <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 z-30 shadow-sm relative">
+      <div className="lg:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-30 shadow-sm relative">
         <div className="flex items-center gap-2">
           <img src="/BillSpark Logo.png" alt="BillSpark" className="h-8 w-auto object-contain" />
-          <span className="font-black text-xl text-slate-800 tracking-tight">BillSpark</span>
+          <span className="font-black text-xl text-slate-800 dark:text-white tracking-tight">BillSpark</span>
         </div>
         <button 
           onClick={() => setMenuOpen(!menuOpen)}
-          className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors"
+          className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-400 rounded-lg transition-colors"
         >
           {menuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -80,7 +92,7 @@ export default function DashboardLayout() {
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 lg:w-64 bg-white lg:border-r border-slate-200 shadow-2xl lg:shadow-sm flex flex-col transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${menuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 lg:w-64 bg-white dark:bg-slate-900 lg:border-r border-slate-200 dark:border-slate-800 shadow-2xl lg:shadow-sm flex flex-col transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${menuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         
         <div className="p-6 hidden lg:block">
           <img src="/BillSpark Logo.png" alt="BillSpark" className="h-10 w-auto" />
@@ -88,9 +100,9 @@ export default function DashboardLayout() {
         </div>
         
         {/* Mobile Header Inside Drawer */}
-        <div className="p-6 lg:hidden flex justify-between items-center border-b border-slate-100">
+        <div className="p-6 lg:hidden flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
           <img src="/BillSpark Logo.png" alt="BillSpark" className="h-8 w-auto" />
-          <button onClick={() => setMenuOpen(false)} className="p-2 bg-slate-100 text-slate-500 rounded-lg"><X size={20}/></button>
+          <button onClick={() => setMenuOpen(false)} className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg"><X size={20}/></button>
         </div>
         
         <nav className="flex-1 px-4 space-y-2 mt-6 lg:mt-4 overflow-y-auto">
@@ -103,8 +115,8 @@ export default function DashboardLayout() {
           <SidebarLink to="/app/settings" icon={Settings} label="Settings" current={location.pathname === '/app/settings'} onClick={() => setMenuOpen(false)} />
         </nav>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg mb-4 text-sm font-bold ${isOnline ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg mb-4 text-sm font-bold ${isOnline ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
             {isOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
             {isOnline ? 'Online - Sync Ready' : 'Offline Mode Active'}
           </div>
@@ -119,7 +131,7 @@ export default function DashboardLayout() {
 
           <button 
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold"
+            className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors font-semibold"
           >
             <LogOut size={20} />
             <span>Logout</span>
@@ -128,7 +140,7 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Main App Content Area */}
-      <main className="flex-1 overflow-auto bg-slate-50/50 h-[calc(100vh-73px)] lg:h-screen w-full relative">
+      <main className="flex-1 overflow-auto bg-bg-base h-[calc(100vh-73px)] lg:h-screen w-full relative">
         <div className="p-4 lg:p-8 h-full">
           <Outlet />
         </div>
