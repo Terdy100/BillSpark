@@ -1,0 +1,17 @@
+{
+  "name": "BillSpark POS",
+  "short_name": "BillSpark",
+  "description": "Smart, Offline-First POS for Ghanaian Shops",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/BillSpark Logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

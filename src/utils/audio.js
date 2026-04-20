@@ -68,3 +68,10 @@ export const playBeep = () => {
     console.error("Audio beep failed", e);
   }
 };
+
+export const playCheckoutSound = () => {
+  if (!isAudioEnabled) return;
+  const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3');
+  audio.volume = 0.5;
+  audio.play().catch(e => console.warn('Checkout sound failed', e));
+};

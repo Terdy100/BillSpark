@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { getUnsyncedSales } from '../lib/offline';
+import { db, getUnsyncedSales } from '../lib/offline';
 import { DollarSign, Activity, AlertTriangle, RefreshCw, ShoppingCart } from 'lucide-react';
 
 export default function DashboardHome() {
@@ -12,18 +12,33 @@ export default function DashboardHome() {
   });
 
   useEffect(() => {
-    // In a real app, we'd fetch actual sales for today from local DB + network
     const fetchStats = async () => {
-      const unsynced = await getUnsyncedSales();
-      setStats(prev => ({ ...prev, unsynced: unsynced.length }));
+      // 1. Get Today's Date Range
+      const now = new Date();
+      const startOfDay = new Date(now.setHours(0,0,0,0)).toISOString();
+      const endOfDay = new Date(now.setHours(23,59,59,999)).toISOString();
+
+      // 2. Query Today's Sales
+      const todaySalesData = await db.sales
+        .where('created_at')
+        .between(startOfDay, endOfDay)
+        .toArray();
+
+      const todayTotal = todaySalesData.reduce((sum, s) => sum + s.total, 0);
       
-      // Stub data for MVP
-      setStats(prev => ({
-        ...prev,
-        todaySales: 1250,
-        transactions: 42,
-        profit: 350
-      }));
+      // 3. Get Unsynced Count
+      const unsynced = await getUnsyncedSales();
+      
+      // 4. Calculate Estimate Profit (requires joining with sale_items/products)
+      // For now, let's keep a simplified estimate (e.g. 25% margin) until we implement itemized cost tracking
+      const estimatedProfit = todayTotal * 0.25;
+
+      setStats({
+        todaySales: todayTotal,
+        transactions: todaySalesData.length,
+        profit: estimatedProfit,
+        unsynced: unsynced.length
+      });
     };
     fetchStats();
   }, []);

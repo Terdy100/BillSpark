@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { LayoutDashboard, ShoppingCart, Package, Archive, PieChart, LogOut, Wifi, WifiOff, Menu, X } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Archive, PieChart, LogOut, Wifi, WifiOff, Menu, X, History, Settings, Moon, Sun } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const SidebarLink = ({ to, icon: Icon, label, current, onClick }) => (
@@ -19,9 +19,25 @@ export default function DashboardLayout() {
   const location = useLocation();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(localStorage.getItem('billspark_dark_mode') === 'true');
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    if (darkMode) {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
+    }
+    localStorage.setItem('billspark_dark_mode', darkMode);
+  }, [darkMode]);
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      // Auto-sync when coming back online
+      const { syncData } = await import('../lib/sync');
+      console.log('Detected online status, starting auto-sync...');
+      await syncData();
+    };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
@@ -83,6 +99,8 @@ export default function DashboardLayout() {
           <SidebarLink to="/app/products" icon={Package} label="Products" current={location.pathname === '/app/products'} onClick={() => setMenuOpen(false)} />
           <SidebarLink to="/app/inventory" icon={Archive} label="Inventory" current={location.pathname === '/app/inventory'} onClick={() => setMenuOpen(false)} />
           <SidebarLink to="/app/reports" icon={PieChart} label="Reports" current={location.pathname === '/app/reports'} onClick={() => setMenuOpen(false)} />
+          <SidebarLink to="/app/history" icon={History} label="Sales History" current={location.pathname === '/app/history'} onClick={() => setMenuOpen(false)} />
+          <SidebarLink to="/app/settings" icon={Settings} label="Settings" current={location.pathname === '/app/settings'} onClick={() => setMenuOpen(false)} />
         </nav>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/50">
@@ -90,6 +108,15 @@ export default function DashboardLayout() {
             {isOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
             {isOnline ? 'Online - Sync Ready' : 'Offline Mode Active'}
           </div>
+          
+          <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className="flex w-full items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors font-semibold mb-2"
+          >
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
+          </button>
+
           <button 
             onClick={handleLogout}
             className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold"

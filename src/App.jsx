@@ -11,6 +11,8 @@ import POS from './pages/POS';
 import Products from './pages/Products';
 import Inventory from './pages/Inventory';
 import Reports from './pages/Reports';
+import SalesHistory from './pages/SalesHistory';
+import Settings from './pages/Settings';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -53,6 +55,8 @@ function App() {
           <Route path="products" element={<Products />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="history" element={<SalesHistory />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </Router>
