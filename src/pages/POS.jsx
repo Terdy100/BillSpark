@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, saveSaleOffline } from '../lib/offline';
-import { Search, ScanLine, Plus, Trash2, CreditCard, Banknote, PauseCircle, ShoppingCart, CheckCircle, Printer, Share2, X } from 'lucide-react';
+import { Search, ScanLine, Trash2, CreditCard, Banknote, ShoppingCart, CheckCircle, Printer, Share2, X } from 'lucide-react';
 import { playBeep, initAudio, getAudioState, playCheckoutSound } from '../utils/audio';
 import BarcodeScanner from '../components/BarcodeScanner';
 
 export default function POS() {
   const [products, setProducts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [baskets, setBaskets] = useState([{ id: 1, name: 'Basket 1', items: [] }]);
   const [activeBasketId, setActiveBasketId] = useState(1);
   const [isScanning, setIsScanning] = useState(false);
@@ -15,7 +14,6 @@ export default function POS() {
   const [paymentType, setPaymentType] = useState('cash');
   const [amountReceived, setAmountReceived] = useState('');
   const [completedSale, setCompletedSale] = useState(null);
-  const [quickAdd, setQuickAdd] = useState(null); // { barcode }
 
   const handleEnableAudio = () => {
     initAudio();
@@ -53,7 +51,7 @@ export default function POS() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [products, baskets, activeBasketId]);
 
-  // UI Keyboard Shortcuts
+  // UI Keyboard Shortcuts (Silent support, no labels)
   useEffect(() => {
     const handleShortcuts = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -62,12 +60,11 @@ export default function POS() {
       if (e.key === 'Escape') {
         if (isScanning) setIsScanning(false);
         if (completedSale) setCompletedSale(null);
-        if (quickAdd) setQuickAdd(null);
       }
     };
     window.addEventListener('keydown', handleShortcuts);
     return () => window.removeEventListener('keydown', handleShortcuts);
-  }, [isScanning, completedSale, activeBasketId, quickAdd]);
+  }, [isScanning, completedSale, activeBasketId]);
 
   const showFeedback = (msg, isSuccess) => {
     setScanFeedback({ message: msg, type: isSuccess ? 'success' : 'error' });
@@ -94,31 +91,13 @@ export default function POS() {
       if ((product.stock_qty || 0) <= 5) {
         showFeedback(`${product.name} is low on stock (${product.stock_qty})!`, false);
       } else {
-        showFeedback(`Added ${product.name} to basket!`, true);
+        showFeedback(`Added ${product.name}!`, true);
       }
     } else {
-      showFeedback(`Product not found: ${scannedCode}`, false);
-      setQuickAdd({ barcode: scannedCode });
+      showFeedback(`Product not found!`, false);
     }
+    // Scanner stays open (continuous) because we don't call setIsScanning(false) here.
   }, [products, activeBasketId]);
-
-  const handleQuickAdd = async (e) => {
-    e.preventDefault();
-    const { name, price } = e.target.elements;
-    const newProd = {
-      id: Date.now(),
-      name: name.value,
-      sell_price: parseFloat(price.value),
-      barcode: quickAdd.barcode,
-      stock_qty: 0,
-      category: 'Quick Add'
-    };
-    await db.products_cache.add(newProd);
-    setProducts(prev => [...prev, newProd]);
-    setBaskets(prev => prev.map(b => b.id === activeBasketId ? { ...b, items: [...b.items, { ...newProd, qty: 1 }] } : b));
-    setQuickAdd(null);
-    showFeedback(`Quick Added ${newProd.name}!`, true);
-  };
 
   const activeBasket = baskets.find(b => b.id === activeBasketId) || baskets[0];
   const total = activeBasket.items.reduce((sum, item) => sum + (item.sell_price * item.qty), 0);
@@ -195,18 +174,13 @@ export default function POS() {
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
-  const getCategoryColor = (cat) => {
-    const colors = { 'Drinks': 'bg-blue-100 text-blue-700', 'Bakery': 'bg-amber-100 text-amber-700', 'Quick Add': 'bg-purple-100 text-purple-700' };
-    return colors[cat] || 'bg-slate-100 text-slate-600';
-  };
-
   return (
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 bg-slate-50/50 -m-4 p-4 lg:-m-8 lg:p-8 min-h-[calc(100vh-4rem)] relative">
       {!audioEnabled && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-md">
           <div className="bg-slate-900 border border-slate-700 p-8 rounded-[2rem] text-center max-w-sm">
             <h2 className="text-2xl font-black text-white mb-4">Enable Sound</h2>
-            <p className="text-slate-400 mb-6">Required for audible scan feedback.</p>
+            <p className="text-slate-400 mb-6 font-bold">Sound feedback is needed for scanning.</p>
             <button onClick={handleEnableAudio} className="w-full py-4 bg-blue-600 text-white font-black rounded-xl shadow-lg">🔊 Enable Sound</button>
           </div>
         </div>
@@ -215,9 +189,6 @@ export default function POS() {
       {scanFeedback && (
         <div className={`fixed top-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-full font-black text-lg shadow-2xl z-[100] flex items-center justify-center gap-3 ${scanFeedback.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
           {scanFeedback.message}
-          {scanFeedback.type === 'error' && (
-            <button onClick={() => setQuickAdd({ barcode: scanFeedback.message.split(': ')[1] || 'Unknown' })} className="ml-4 bg-white text-red-600 px-3 py-1 rounded-lg text-sm">Quick Add</button>
-          )}
         </div>
       )}
 
@@ -225,7 +196,7 @@ export default function POS() {
         <BarcodeScanner onScan={handleScanSuccess} onClose={() => setIsScanning(false)} />
       )}
 
-      {/* Main Barcode Area */}
+      {/* Shopping Baskets Area */}
       <div className="w-full lg:flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden order-2 lg:order-1">
         <div className="flex bg-slate-100 p-2 gap-2 border-b border-slate-200 overflow-x-auto">
           {baskets.map(b => (
@@ -238,27 +209,28 @@ export default function POS() {
 
         <div className="flex-1 overflow-auto p-4 space-y-3">
           {activeBasket.items.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-300">
+            <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
                <ShoppingCart size={64} className="mb-4 opacity-10" />
-               <p className="font-bold">Scan items to begin sale</p>
+               <p className="font-bold">Scanning area is ready!</p>
+               <p className="text-sm font-bold">Start scanning items to begin sale.</p>
             </div>
           ) : activeBasket.items.map(item => (
             <div key={item.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
               <div className="flex-1">
                 <h4 className="font-bold text-slate-800">{item.name}</h4>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${getCategoryColor(item.category)}`}>{item.category || 'General'}</span>
+                <div className="text-blue-600 font-bold text-sm">GHS {item.sell_price.toFixed(2)}</div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center bg-white rounded-xl border border-slate-200">
                   <button onClick={() => updateQty(item.id, -1)} className="px-3 py-2 text-slate-600">-</button>
                   <button onClick={() => {
-                      const n = prompt("Qty:", item.qty);
+                      const n = prompt("Enter Quantity:", item.qty);
                       if (n && !isNaN(n)) updateQty(item.id, parseInt(n) - item.qty);
                   }} className="px-4 font-black">{item.qty}</button>
                   <button onClick={() => updateQty(item.id, 1)} className="px-3 py-2 text-slate-600">+</button>
                 </div>
                 <div className="w-24 text-right font-black">GHS {(item.sell_price * item.qty).toFixed(2)}</div>
-                <button onClick={() => removeFromBasket(item.id)} className="p-2 text-red-500"><Trash2 size={20} /></button>
+                <button onClick={() => removeFromBasket(item.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={20} /></button>
               </div>
             </div>
           ))}
@@ -271,19 +243,19 @@ export default function POS() {
           </div>
           
           <div className="grid grid-cols-2 gap-4 mb-6">
-             <button onClick={() => setPaymentType('cash')} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 font-bold transition-all ${paymentType === 'cash' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white'}`}>
+             <button onClick={() => setPaymentType('cash')} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 font-bold transition-all ${paymentType === 'cash' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500'}`}>
                 <Banknote size={24} /> Cash
              </button>
-             <button onClick={() => setPaymentType('momo')} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 font-bold transition-all ${paymentType === 'momo' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white'}`}>
+             <button onClick={() => setPaymentType('momo')} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 font-bold transition-all ${paymentType === 'momo' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-500'}`}>
                 <CreditCard size={24} /> Mobile Money
              </button>
           </div>
 
           {paymentType === 'cash' && (
-            <div className="grid grid-cols-2 gap-4 mb-6 animate-in slide-in-from-bottom-4">
+            <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Cash Received</label>
-                <input type="number" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-xl font-black text-xl" placeholder="0.00" />
+                <input type="number" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-xl font-black text-xl outline-none focus:border-blue-500" placeholder="0.00" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Change Due</label>
@@ -292,50 +264,33 @@ export default function POS() {
             </div>
           )}
 
-          <button onClick={handleCheckout} className="w-full py-5 bg-blue-600 text-white font-black text-xl rounded-2xl shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition-all">CHECKOUT (F9)</button>
+          <button onClick={handleCheckout} className="w-full py-5 bg-blue-600 text-white font-black text-xl rounded-2xl shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition-all">CHECKOUT</button>
         </div>
       </div>
 
-      {/* Sidebar Products */}
+      {/* Control Sidebar */}
       <div className="w-full lg:w-[400px] flex flex-col gap-4 order-1 lg:order-2">
-        <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setIsScanning(true)} className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-200 rounded-2xl font-bold text-slate-700 shadow-sm"><ScanLine size={20} /> (F1) Scan</button>
-          <button onClick={() => setBaskets(baskets.map(b => b.id === activeBasketId ? { ...b, items: [] } : b))} className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-200 rounded-2xl font-bold text-slate-700 shadow-sm"><Trash2 size={20} /> Clear</button>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input type="text" placeholder="Search product..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl font-bold outline-none" />
-        </div>
-        <div className="flex-1 bg-white border border-slate-200 rounded-3xl p-4 overflow-auto">
-          <div className="grid grid-cols-2 gap-3">
-             {products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())).map(p => (
-               <button key={p.id} onClick={() => handleScanSuccess(p.barcode || p.sku)} className="flex flex-col text-left p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-300 transition-all">
-                  <div className="font-bold text-slate-800 leading-tight mb-1">{p.name}</div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold self-start ${getCategoryColor(p.category)}`}>{p.category || 'General'}</span>
-                  <div className="text-blue-600 font-black text-lg mt-2">GHS {p.sell_price.toFixed(2)}</div>
-               </button>
-             ))}
-          </div>
+        <button 
+          onClick={() => setIsScanning(true)} 
+          className="flex items-center justify-center gap-4 py-8 bg-blue-600 text-white rounded-3xl font-black text-2xl shadow-xl shadow-blue-600/20 active:scale-95 transition-all"
+        >
+          <ScanLine size={32} /> Scan
+        </button>
+        
+        <button 
+          onClick={() => setBaskets(baskets.map(b => b.id === activeBasketId ? { ...b, items: [] } : b))} 
+          className="flex items-center justify-center gap-2 py-4 bg-white border border-slate-200 rounded-2xl font-bold text-slate-500 hover:text-red-500 transition-all"
+        >
+          <Trash2 size={20} /> Clear Basket
+        </button>
+
+        <div className="mt-auto hidden lg:block">
+           <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+               <h4 className="font-black text-blue-700 mb-1">Stock Reminder</h4>
+               <p className="text-blue-600/70 text-sm font-bold">Scanning will warn you if any scanned item is low on stock.</p>
+           </div>
         </div>
       </div>
-
-      {/* Quick Add Modal */}
-      {quickAdd && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8">
-            <h3 className="text-2xl font-black mb-2">New Item Scanned</h3>
-            <p className="text-slate-500 mb-6">Barcode: <span className="text-blue-600 font-bold">{quickAdd.barcode}</span></p>
-            <form onSubmit={handleQuickAdd} className="space-y-4">
-              <input required name="name" type="text" placeholder="Item Name" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl" autoFocus />
-              <input required name="price" type="number" step="0.01" placeholder="Price (GHS)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl" />
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setQuickAdd(null)} className="py-4 bg-slate-100 font-black rounded-xl">Skip</button>
-                <button type="submit" className="py-4 bg-blue-600 text-white font-black rounded-xl">Save & Add</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Completed Sale Receipt Modal */}
       {completedSale && (
@@ -348,26 +303,26 @@ export default function POS() {
             </div>
             <div className="p-8 max-h-[50vh] overflow-auto">
               <div className="text-center mb-6">
-                <h3 className="font-black text-xl">BillSpark POS</h3>
+                <h3 className="font-black text-xl text-slate-800">BillSpark POS</h3>
                 <p className="text-xs text-slate-400">{completedSale.date}</p>
               </div>
               <div className="space-y-3 mb-6">
                 {completedSale.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-sm font-bold">
-                    <span>{item.qty}x {item.name}</span>
-                    <span>GHS {(item.qty * item.price).toFixed(2)}</span>
+                    <span className="text-slate-600">{item.qty}x {item.name}</span>
+                    <span className="text-slate-800">GHS {(item.qty * item.price).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
-              <div className="border-t-2 border-dashed pt-4 flex justify-between text-2xl font-black text-blue-600">
+              <div className="border-t-2 border-dashed border-slate-200 pt-4 flex justify-between text-2xl font-black text-blue-600">
                 <span>Total</span>
                 <span>GHS {completedSale.total.toFixed(2)}</span>
               </div>
             </div>
-            <div className="p-6 bg-slate-50 grid grid-cols-2 gap-3">
+            <div className="p-6 bg-slate-50 grid grid-cols-2 gap-3 border-t border-slate-200">
               <button onClick={shareReceiptWhatsApp} className="py-3 bg-green-600 text-white font-black rounded-xl flex items-center justify-center gap-2"><Share2 size={18} /> WhatsApp</button>
-              <button onClick={() => window.print()} className="py-3 bg-white border border-slate-200 font-black rounded-xl flex items-center justify-center gap-2"><Printer size={18} /> Print</button>
-              <button onClick={() => setCompletedSale(null)} className="col-span-2 py-4 bg-slate-800 text-white font-black rounded-xl mt-2">New Transaction</button>
+              <button onClick={() => window.print()} className="py-3 bg-white border border-slate-200 font-black rounded-xl flex items-center justify-center gap-2 text-slate-700 font-sans"><Printer size={18} /> Print</button>
+              <button onClick={() => setCompletedSale(null)} className="col-span-2 py-4 bg-slate-800 text-white font-black rounded-xl mt-2 font-sans tracking-wide">NEW SALE</button>
             </div>
           </div>
         </div>
