@@ -10,8 +10,14 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
   const startScanning = useCallback((html5QrCode) => {
     const config = {
-      fps: 20,
-      qrbox: { width: 300, height: 150 },
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0,
+      rememberLastUsedCamera: true,
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true
+      },
+      supportedScanTypes: [0]
     };
 
     html5QrCode.start(
@@ -131,9 +137,23 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
           <div className="flex items-center gap-2">
             {continuous && scanHistory.length > 0 && (
               <span className="px-3 py-1.5 bg-blue-100 text-blue-700 font-black rounded-full text-sm">
-                {scanHistory.length} scanned
+                {scanHistory.length}
               </span>
             )}
+            <button 
+              onClick={async () => {
+                try {
+                  const state = scannerRef.current.getTorchState();
+                  await scannerRef.current.applyVideoConstraints({ focusMode: "continuous", torch: !state });
+                } catch (e) {
+                  console.warn("Torch not supported", e);
+                }
+              }}
+              className="p-3 bg-slate-200 hover:bg-yellow-100 text-slate-600 hover:text-yellow-600 rounded-xl transition-all"
+              title="Toggle Flash"
+            >
+              <Zap size={20} />
+            </button>
             <button onClick={onClose} className="text-slate-500 hover:text-slate-800 font-bold px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors">
               {continuous ? 'Done' : 'Close'}
             </button>
@@ -178,7 +198,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
               
               {/* Scan Zone UI */}
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/40">
-                <div className="w-[300px] h-[150px] border-[4px] border-white/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center bg-transparent overflow-hidden">
+                <div className="w-[250px] h-[250px] border-[4px] border-white/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center bg-transparent overflow-hidden">
                   <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_20px_rgba(239,68,68,1)] laser-sweep rounded-full"></div>
                 </div>
                 {continuous && (
