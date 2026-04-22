@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Zap } from 'lucide-react';
 
 export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode", continuous = false }) {
   const [initError, setInitError] = useState(null);
