@@ -90,22 +90,23 @@ export default function Landing() {
           <AnimatePresence mode="wait">
             <motion.div 
               key={`sale-${mockIndex}`}
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -20 }}
+              initial={{ opacity: 0, scale: 0.6, y: 20 }}
+              animate={{ opacity: 1, scale: 0.85, y: 0 }}
+              exit={{ opacity: 0, scale: 0.6, y: -20 }}
+              whileInView={{ scale: 1 }} // slightly larger on desktop
               transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute -bottom-10 -left-6 bg-white/95 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 z-20 hidden md:block w-full max-w-[260px]"
+              className="absolute -bottom-8 -left-2 md:-bottom-10 md:-left-6 bg-white/95 backdrop-blur-md p-4 md:p-6 rounded-3xl shadow-2xl border border-white/50 z-20 w-[180px] md:w-[260px] origin-bottom-left"
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-black">✓</div>
+              <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-4">
+                <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-black text-sm md:text-base">✓</div>
                 <div className="text-left">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sale Success</div>
-                  <div className="text-sm font-bold text-slate-800 line-clamp-1">{currentMock.name}</div>
+                  <div className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">Sale Success</div>
+                  <div className="text-xs md:text-sm font-bold text-slate-800 line-clamp-1">{currentMock.name}</div>
                 </div>
               </div>
-              <div className="flex justify-between items-end border-t border-slate-50 pt-3">
-                <div className="text-xs font-black text-slate-500">GHS {currentMock.price} Paid</div>
-                <div className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black animate-pulse" style={{ animationDuration: '4s' }}>PRINTING...</div>
+              <div className="flex justify-between items-end border-t border-slate-50 pt-2 md:pt-3">
+                <div className="text-[10px] md:text-xs font-black text-slate-500">GHS {currentMock.price} Paid</div>
+                <div className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[7px] md:text-[9px] font-black animate-pulse" style={{ animationDuration: '4s' }}>PRINTING...</div>
               </div>
             </motion.div>
           </AnimatePresence>
@@ -113,17 +114,18 @@ export default function Landing() {
           <AnimatePresence mode="wait">
             <motion.div 
               key={`stat-${mockIndex}`}
-              initial={{ opacity: 0, x: 40, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: -20, scale: 0.9 }}
+              initial={{ opacity: 0, x: 20, scale: 0.6 }}
+              animate={{ opacity: 1, x: 0, scale: 0.85 }}
+              exit={{ opacity: 0, x: -20, scale: 0.6 }}
+              whileInView={{ scale: 1 }}
               transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
-              className="absolute -top-10 -right-6 bg-white/95 backdrop-blur-md p-5 rounded-3xl shadow-2xl border border-white/50 z-20 hidden md:block w-full max-w-[240px]"
+              className="absolute -top-8 -right-2 md:-top-10 md:-right-6 bg-white/95 backdrop-blur-md p-4 md:p-5 rounded-3xl shadow-2xl border border-white/50 z-20 w-[160px] md:w-[240px] origin-top-right"
             >
-              <div className="flex items-center gap-4">
-                <div className={`p-2.5 ${currentMock.bg} ${currentMock.color} rounded-2xl shadow-sm`}><currentMock.icon size={22} /></div>
-                <div className="text-sm font-black text-left text-slate-800 leading-tight">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 ${currentMock.bg} ${currentMock.color} rounded-xl md:rounded-2xl shadow-sm`}><currentMock.icon size={18} /></div>
+                <div className="text-xs md:text-sm font-black text-left text-slate-800 leading-tight">
                   {currentMock.profit}
-                  <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Real-time Stats</div>
+                  <div className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase mt-1">Real-time Stats</div>
                 </div>
               </div>
             </motion.div>
