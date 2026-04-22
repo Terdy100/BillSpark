@@ -23,6 +23,10 @@ export default function Reports() {
   }, [timeRange, customRange]);
 
   const loadReportData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const bizId = session.user.id;
+
     const now = new Date();
     let startDate = new Date();
     let endDate = new Date();
@@ -41,8 +45,9 @@ export default function Reports() {
     }
 
     const sales = await db.sales
-      .where('created_at')
-      .between(startDate.toISOString(), endDate.toISOString())
+      .where('business_id')
+      .equals(bizId)
+      .and(s => s.created_at >= startDate.toISOString() && s.created_at <= endDate.toISOString())
       .toArray();
 
     // 1. Process Daily Sales for Bar Chart

@@ -61,7 +61,7 @@ export default function Landing() {
         <div className="relative w-full max-w-4xl group">
           <div className="relative rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white animate-fade-in duration-1000 aspect-[16/9] md:aspect-[21/9]">
             <img
-              src="public/happy customers.png"
+              src="https://i.ibb.co/LzP6m0V6/happy-customers.png"
               alt="Happy Store Owner"
               className="w-full h-full object-cover transition-transform duration-[20s] hover:scale-110"
             />

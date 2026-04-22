@@ -78,8 +78,11 @@ export default function Products() {
     if (!form.name || !form.price) return alert("Name and price are required");
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return alert("Session expired. Please login again.");
+
       const productPayload = {
-        business_id: 'local_bus_1',
+        business_id: session.user.id,
         name: form.name,
         sku: form.sku,
         barcode: form.barcode,

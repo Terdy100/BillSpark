@@ -52,8 +52,21 @@ export default function DashboardLayout() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial sync on mount
-    triggerSync();
+    // Initial sync and product pull on mount
+    const initData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        await triggerSync();
+        try {
+          const { pullProductsAndCache } = await import('../lib/sync');
+          await pullProductsAndCache(session.user.id);
+        } catch (e) {
+          console.error('Initial product fetch error:', e);
+        }
+      }
+    };
+    
+    initData();
 
     return () => {
       window.removeEventListener('online', handleOnline);

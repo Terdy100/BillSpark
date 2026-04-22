@@ -13,24 +13,33 @@ export default function DashboardHome() {
 
   useEffect(() => {
     const fetchStats = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+
+      const bizId = session.user.id;
+
       // 1. Get Today's Date Range
       const now = new Date();
       const startOfDay = new Date(now.setHours(0,0,0,0)).toISOString();
       const endOfDay = new Date(now.setHours(23,59,59,999)).toISOString();
 
-      // 2. Query Today's Sales
+      // 2. Query Today's Sales (Filtered by bizId)
       const todaySalesData = await db.sales
-        .where('created_at')
-        .between(startOfDay, endOfDay)
+        .where('business_id')
+        .equals(bizId)
+        .and(s => s.created_at >= startOfDay && s.created_at <= endOfDay)
         .toArray();
 
       const todayTotal = todaySalesData.reduce((sum, s) => sum + s.total, 0);
       
-      // 3. Get Unsynced Count
-      const unsynced = await getUnsyncedSales();
+      // 3. Get Unsynced Count (Filtered by bizId)
+      const unsynced = await db.sales
+        .where('business_id')
+        .equals(bizId)
+        .and(s => s.synced === 0)
+        .toArray();
       
-      // 4. Calculate Estimate Profit (requires joining with sale_items/products)
-      // For now, let's keep a simplified estimate (e.g. 25% margin) until we implement itemized cost tracking
+      // 4. Calculate Estimate Profit
       const estimatedProfit = todayTotal * 0.25;
 
       setStats({

@@ -13,8 +13,15 @@ export default function SalesHistory() {
   }, []);
 
   const loadSales = async () => {
-    const allSales = await db.sales.orderBy('created_at').reverse().toArray();
-    setSales(allSales);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+      const allSales = await db.sales
+        .where('business_id')
+        .equals(session.user.id)
+        .reverse()
+        .sortBy('created_at');
+      setSales(allSales);
+    }
   };
 
   const viewSaleDetails = async (sale) => {
