@@ -24,19 +24,41 @@ export default function SalesHistory() {
   };
 
   const shareReceiptWhatsApp = (sale, items) => {
-    let text = `*RECEIPT - BillSpark*%0A`;
-    text += `Receipt #: ${sale.id}%0A`;
-    text += `Date: ${new Date(sale.created_at).toLocaleString()}%0A`;
-    text += `--------------------------%0A`;
-    items.forEach(item => {
-      text += `${item.qty}x ${item.name || 'Item'} - GHS ${(item.qty * item.price).toFixed(2)}%0A`;
-    });
-    text += `--------------------------%0A`;
-    text += `*TOTAL: GHS ${sale.total.toFixed(2)}*%0A`;
-    text += `Payment: ${sale.payment_type.toUpperCase()}%0A`;
-    text += `%0AThank you for shopping with us!`;
-    
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+    try {
+      const settings = JSON.parse(localStorage.getItem('billspark_settings') || '{}');
+      const shopName = (settings.name || 'BillSpark POS').toUpperCase();
+      
+      let msg = `*REPRINT RECEIPT: ${shopName}*\n`;
+      msg += `ID: #${sale.id} | ${new Date(sale.created_at).toLocaleString()}\n`;
+      msg += `--------------------------\n`;
+      
+      msg += "```\n";
+      (items || []).forEach(item => {
+        const qtyName = `${item.qty}x ${item.name || 'Item'}`;
+        const price = (item.qty * item.price).toFixed(2);
+        const padding = Math.max(1, 20 - qtyName.length);
+        msg += `${qtyName}${" ".repeat(padding)}${price}\n`;
+      });
+      msg += "```\n";
+      
+      msg += `--------------------------\n`;
+      msg += `*TOTAL: GHS ${sale.total.toFixed(2)}*\n`;
+      msg += `Method: ${sale.payment_type.toUpperCase()}\n`;
+
+      if (sale.payment_type === 'cash') {
+        msg += `Paid: GHS ${sale.amount_received.toFixed(2)}\n`;
+        msg += `Change: GHS ${sale.change_due.toFixed(2)}\n`;
+      }
+
+      msg += `\n_Thank you for your business!_\n`;
+      msg += `*BillSpark Smart POS*`;
+
+      const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+      window.open(whatsappUrl, '_blank');
+    } catch (err) {
+      console.error('WhatsApp Share Error:', err);
+      alert('Could not share to WhatsApp.');
+    }
   };
 
   const filteredSales = sales.filter(s => 
@@ -111,54 +133,67 @@ export default function SalesHistory() {
               <button onClick={() => setSelectedSale(null)} className="text-slate-400 hover:text-slate-700 p-2"><X size={24} /></button>
             </div>
 
-            <div className="p-8 max-h-[60vh] overflow-auto thermal-receipt">
-              <div className="text-center mb-6">
-                <h3 className="font-black text-xl text-slate-800">BillSpark POS</h3>
-                <p className="text-sm text-slate-500 font-bold">Accra, Ghana</p>
-                <p className="text-xs text-slate-400">{new Date(selectedSale.created_at).toLocaleString()}</p>
-                <p className="text-xs text-slate-400 font-bold mt-1">Receipt #{selectedSale.id}</p>
+            <div id="print-receipt" className="bg-white">
+              <div className="bg-blue-600 p-8 text-center text-white">
+                <h3 className="text-2xl font-black">Reprint Receipt</h3>
+                <p className="font-bold opacity-80 uppercase tracking-widest text-xs">Original ID: #{selectedSale.id}</p>
               </div>
 
-              <div className="space-y-4 mb-6">
-                {saleItems.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-sm font-bold">
-                    <span className="text-slate-600">{item.qty}x {item.name || 'Item'}</span>
-                    <span className="text-slate-800">GHS {(item.qty * item.price).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t-2 border-dashed border-slate-200 pt-4 space-y-2">
-                <div className="flex justify-between text-xl font-black text-blue-600">
-                  <span>Total Due</span>
-                  <span>GHS {selectedSale.total.toFixed(2)}</span>
+              <div className="p-8 max-h-[60vh] overflow-auto print:max-h-none print:overflow-visible">
+                <div className="text-center mb-6">
+                  <img src="/BillSpark Logo.png" alt="Logo" className="h-12 w-auto mx-auto mb-4" />
+                  <h3 className="font-black text-2xl text-slate-800 uppercase tracking-tight">{JSON.parse(localStorage.getItem('billspark_settings') || '{}').name || 'BillSpark POS'}</h3>
+                  <p className="text-sm text-slate-500 font-bold">{JSON.parse(localStorage.getItem('billspark_settings') || '{}').address || 'Accra, Ghana'}</p>
+                  <p className="text-sm text-slate-500 font-bold">{JSON.parse(localStorage.getItem('billspark_settings') || '{}').phone || ''}</p>
+                  <div className="border-t border-slate-100 my-4"></div>
+                  <p className="text-xs text-slate-400 font-bold">{new Date(selectedSale.created_at).toLocaleString()}</p>
                 </div>
-              </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 text-sm font-bold text-slate-500">
-                <div className="flex justify-between">
-                  <span>Payment Type</span>
-                  <span className="uppercase">{selectedSale.payment_type}</span>
+                <div className="space-y-4 mb-6">
+                  {saleItems.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm font-bold">
+                      <span className="text-slate-600">{item.qty}x {item.name || 'Item'}</span>
+                      <span className="text-slate-800">GHS {(item.qty * item.price).toFixed(2)}</span>
+                    </div>
+                  ))}
                 </div>
-                {selectedSale.payment_type === 'cash' && (
-                  <div className="flex justify-between mt-1 text-green-600">
-                    <span>Change Given</span>
-                    <span>GHS {selectedSale.change_due.toFixed(2)}</span>
+
+                <div className="border-t-2 border-dashed border-slate-200 pt-4 space-y-2">
+                  <div className="flex justify-between text-2xl font-black text-blue-600">
+                    <span>Total Paid</span>
+                    <span>GHS {selectedSale.total.toFixed(2)}</span>
                   </div>
-                )}
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 text-sm font-bold text-slate-500">
+                  <div className="flex justify-between">
+                    <span>Payment Method</span>
+                    <span className="uppercase">{selectedSale.payment_type}</span>
+                  </div>
+                  {selectedSale.payment_type === 'cash' && (
+                    <div className="flex justify-between mt-1 text-green-600">
+                      <span>Change Given</span>
+                      <span>GHS {selectedSale.change_due.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="mt-8 pt-4 border-t border-slate-100 text-center">
+                  <p className="text-[10px] font-black text-slate-300 uppercase letter tracking-widest">Reprinted from BillSpark POS</p>
+                </div>
               </div>
             </div>
 
-            <div className="p-6 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-3">
+            <div className="p-6 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-3 no-print">
               <button 
                 onClick={() => shareReceiptWhatsApp(selectedSale, saleItems)}
-                className="flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-all shadow-lg"
+                className="flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl transition-all shadow-lg active:scale-95"
               >
                 <Share2 size={18} /> WhatsApp
               </button>
               <button 
                 onClick={() => window.print()}
-                className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl transition-all"
+                className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-black rounded-xl transition-all active:scale-95"
               >
                 <Printer size={18} /> Print
               </button>

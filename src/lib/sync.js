@@ -13,8 +13,11 @@ export const syncData = async () => {
     }
 
     for (const sale of unsyncedSales) {
-      const { id: offlineId, ...saleDataToSync } = sale;
+      // Remove id (Dexie auto-inc) and synced status before cloud insert
+      const { id: offlineId, synced, ...saleDataToSync } = sale;
       
+      console.log('Syncing sale to cloud...', saleDataToSync);
+
       // 1. Insert Sale
       const { data: saleRes, error: saleErr } = await supabase
         .from('sales')
@@ -23,7 +26,7 @@ export const syncData = async () => {
         .single();
         
       if (saleErr) {
-        console.error('Error syncing sale:', saleErr);
+        console.error('CRITICAL: Sale sync failed. Check Supabase RLS and Table columns.', saleErr);
         continue;
       }
       
@@ -31,10 +34,13 @@ export const syncData = async () => {
       
       // 2. Insert Sale Items
       const saleItems = await db.sale_items.where('sale_id').equals(offlineId).toArray();
-      const itemsToSync = saleItems.map(item => {
-        const { id, sale_id, ...itemData } = item;
-        return { ...itemData, sale_id: newSaleId };
-      });
+      const itemsToSync = saleItems.map(item => ({
+        sale_id: newSaleId,
+        product_id: item.product_id,
+        qty: item.qty,
+        price: item.price,
+        cost_price: item.cost_price || 0
+      }));
       
       if (itemsToSync.length > 0) {
         const { error: itemsErr } = await supabase
@@ -42,13 +48,14 @@ export const syncData = async () => {
           .insert(itemsToSync);
           
         if (itemsErr) {
-          console.error('Error syncing sale items:', itemsErr);
-          // Potential rollback logic here, keeping simple for MVP
+          console.error('CRITICAL: Sale Items sync failed.', itemsErr);
+          // If items fail, we don't mark as synced so we can try again
           continue; 
         }
       }
       
       // 3. Mark synced locally
+      console.log('Sync successful for sale:', offlineId);
       await markSaleSynced(offlineId);
     }
     

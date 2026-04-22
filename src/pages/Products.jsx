@@ -4,6 +4,8 @@ import { db } from '../lib/offline';
 import { playBeep } from '../utils/audio';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { supabase } from '../lib/supabase';
+import { suggestCategory } from '../utils/categorizer';
+import { Sparkles } from 'lucide-react';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -11,6 +13,31 @@ export default function Products() {
   const [modalState, setModalState] = useState({ isOpen: false, mode: 'add', product: null });
   const [isScanning, setIsScanning] = useState(false);
   const [form, setForm] = useState({ name: '', sku: '', barcode: '', price: '', cost: '', stock: '', category: '' });
+  const [isSuggested, setIsSuggested] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (modalState.isOpen && modalState.mode === 'add') {
+        if (form.name.length > 2) {
+          // If the category is empty OR it was previously suggested by us, we can update it
+          if (!form.category || isSuggested) {
+            const suggestion = suggestCategory(form.name, products);
+            
+            if (suggestion && suggestion !== form.category) {
+              setForm(prev => ({ ...prev, category: suggestion }));
+              setIsSuggested(true);
+            }
+          }
+        } else if (form.name.length === 0 && isSuggested) {
+          // Clear it if they start over
+          setForm(prev => ({ ...prev, category: '' }));
+          setIsSuggested(false);
+        }
+      }
+    }, 600); // 600ms debounce
+
+    return () => clearTimeout(timer);
+  }, [form.name, products, modalState.isOpen, modalState.mode, isSuggested]);
 
   useEffect(() => {
     loadProducts();
@@ -39,8 +66,10 @@ export default function Products() {
         stock: product.stock_qty.toString(),
         category: product.category || ''
       });
+      setIsSuggested(false);
     } else {
       setForm({ name: '', sku: '', barcode: '', price: '', cost: '', stock: '', category: '' });
+      setIsSuggested(false);
     }
   };
 
@@ -109,7 +138,7 @@ export default function Products() {
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Products</h2>
           <p className="text-slate-500 font-medium mt-1">Manage your catalogue and pricing.</p>
         </div>
-        <button onClick={() => openForm('add')} className="flex items-center justify-center w-full sm:w-auto gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-95">
+        <button onClick={() => openForm('add')} className="flex items-center justify-center w-full sm:w-auto gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-95 hover:scale-[1.02] premium-gradient">
           <Plus size={20} /> Add Product
         </button>
       </div>
@@ -142,8 +171,8 @@ export default function Products() {
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr><td colSpan="6" className="p-8 text-center text-slate-400 font-bold">No products found.</td></tr>
-              ) : filtered.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+              ) : filtered.map((p, idx) => (
+                <tr key={p.id} className="table-row-hover transition-all animate-slide-right" style={{ animationDelay: `${idx * 50}ms` }}>
                   <td className="p-6 font-bold text-slate-800">{p.name}</td>
                   <td className="p-6 font-medium text-slate-500">{p.sku || p.barcode || '-'}</td>
                   <td className="p-6">
@@ -169,35 +198,59 @@ export default function Products() {
       </div>
 
       {modalState.isOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white p-6 rounded-3xl shadow-xl w-full max-w-md my-8">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-300">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-md my-8 animate-modal">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-black text-xl text-slate-800">{modalState.mode === 'add' ? 'New Product' : 'Edit Product'}</h3>
+              <h3 className="font-black text-2xl text-slate-800 bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-500">{modalState.mode === 'add' ? 'New Product' : 'Edit Product'}</h3>
               <button onClick={() => setModalState({ ...modalState, isOpen: false })} className="text-slate-400 hover:text-slate-700"><X size={24} /></button>
             </div>
             <form onSubmit={handleSaveProduct} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-600 mb-1">Name</label>
-                <input required type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Verna Water" />
+                <input required type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl input-focus-ring" placeholder="e.g. Verna Water" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-600 mb-1">Selling Price (GHS)</label>
-                  <input required type="number" step="0.01" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="0.00" />
+                  <input required type="number" step="0.01" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl input-focus-ring font-black text-blue-600" placeholder="0.00" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-600 mb-1">Cost Price (GHS)</label>
-                  <input type="number" step="0.01" value={form.cost} onChange={e => setForm({...form, cost: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="0.00" />
+                  <input type="number" step="0.01" value={form.cost} onChange={e => setForm({...form, cost: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl input-focus-ring" placeholder="0.00" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-600 mb-1">Stock Units</label>
-                  <input type="number" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="0" />
+                  <input type="number" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl input-focus-ring" placeholder="0" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-1">Category</label>
-                  <input type="text" value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Drinks" />
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-bold text-slate-600">Category</label>
+                    {isSuggested && (
+                      <span className="flex items-center gap-1 text-[10px] font-black text-white px-2 py-0.5 rounded-full spark-gradient animate-float shadow-sm">
+                        <Sparkles size={10} /> Spark AI
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      list="category-suggestions"
+                      value={form.category} 
+                      onChange={e => {
+                        setForm({...form, category: e.target.value});
+                        setIsSuggested(false);
+                      }} 
+                      className={`w-full p-3 bg-slate-50 border rounded-xl transition-all input-focus-ring ${isSuggested ? 'border-blue-400 ring-4 ring-blue-50' : 'border-slate-200'}`} 
+                      placeholder="e.g. Drinks" 
+                    />
+                    <datalist id="category-suggestions">
+                      {[...new Set(products.map(p => p.category))].filter(Boolean).map(cat => (
+                        <option key={cat} value={cat} />
+                      ))}
+                    </datalist>
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -215,8 +268,9 @@ export default function Products() {
                   </div>
                 </div>
               </div>
-              <button type="submit" className="w-full py-4 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all">
-                {modalState.mode === 'add' ? 'Save Product' : 'Update Product'}
+              <button type="submit" className="w-full py-4 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95 premium-gradient overflow-hidden relative group">
+                <span className="relative z-10">{modalState.mode === 'add' ? 'Save Product' : 'Update Product'}</span>
+                <div className="absolute inset-0 shimmer-bg opacity-0 group-hover:opacity-20 transition-opacity"></div>
               </button>
             </form>
           </div>

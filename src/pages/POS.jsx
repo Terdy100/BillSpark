@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, saveSaleOffline } from '../lib/offline';
 import { Search, ScanLine, Trash2, CreditCard, Banknote, ShoppingCart, CheckCircle, Printer, Share2, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { playBeep, initAudio, getAudioState, playCheckoutSound } from '../utils/audio';
 import BarcodeScanner from '../components/BarcodeScanner';
 
@@ -65,6 +66,14 @@ export default function POS() {
     window.addEventListener('keydown', handleShortcuts);
     return () => window.removeEventListener('keydown', handleShortcuts);
   }, [isScanning, completedSale, activeBasketId]);
+
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) setCurrentUser(session.user);
+    });
+  }, []);
 
   const showFeedback = (msg, isSuccess) => {
     setScanFeedback({ message: msg, type: isSuccess ? 'success' : 'error' });
@@ -136,7 +145,7 @@ export default function POS() {
     const totalCost = itemsData.reduce((sum, item) => sum + (item.cost_price * item.qty), 0);
 
     const saleData = {
-      business_id: 'local_bus_1',
+      business_id: currentUser?.id || 'offline_bus',
       total,
       total_cost: totalCost,
       payment_type: paymentType,
@@ -159,19 +168,45 @@ export default function POS() {
 
   const shareReceiptWhatsApp = () => {
     if (!completedSale) return;
-    let text = `*RECEIPT - BillSpark*%0A`;
-    text += `Receipt #: ${completedSale.id}%0A`;
-    text += `Date: ${completedSale.date}%0A`;
-    text += `--------------------------%0A`;
-    completedSale.items.forEach(item => {
-      text += `${item.qty}x ${item.name} - GHS ${(item.qty * item.price).toFixed(2)}%0A`;
-    });
-    text += `--------------------------%0A`;
-    text += `*TOTAL: GHS ${completedSale.total.toFixed(2)}*%0A`;
-    text += `Payment: ${completedSale.payment_type.toUpperCase()}%0A`;
-    if (completedSale.payment_type === 'cash') text += `Change: GHS ${completedSale.change_due.toFixed(2)}%0A`;
-    text += `%0AThank you for shopping with us!`;
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+    try {
+      const settings = JSON.parse(localStorage.getItem('billspark_settings') || '{}');
+      const shopName = (settings.name || 'BillSpark POS').toUpperCase();
+      
+      // Receipt Header
+      let msg = `*RECEIPT: ${shopName}*\n`;
+      msg += `ID: #${completedSale.id} | ${completedSale.date}\n`;
+      msg += `--------------------------\n`;
+      
+      // Monospaced Table for Items
+      msg += "```\n";
+      const items = completedSale.items || [];
+      items.forEach(item => {
+        const qtyName = `${item.qty}x ${item.name}`;
+        const price = (item.qty * item.price).toFixed(2);
+        // Pad the name to 18 chars, then add the price
+        const padding = Math.max(1, 20 - qtyName.length);
+        msg += `${qtyName}${" ".repeat(padding)}${price}\n`;
+      });
+      msg += "```\n";
+      
+      msg += `--------------------------\n`;
+      msg += `*TOTAL: GHS ${completedSale.total.toFixed(2)}*\n`;
+      msg += `Method: ${completedSale.payment_type.toUpperCase()}\n`;
+
+      if (completedSale.payment_type === 'cash') {
+        msg += `Paid: GHS ${completedSale.amount_received.toFixed(2)}\n`;
+        msg += `Change: GHS ${completedSale.change_due.toFixed(2)}\n`;
+      }
+
+      msg += `\n_Thank you for your business!_\n`;
+      msg += `*BillSpark Smart POS*`;
+
+      const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+      window.open(whatsappUrl, '_blank');
+    } catch (err) {
+      console.error('WhatsApp Share Error:', err);
+      alert('Could not share to WhatsApp.');
+    }
   };
 
   return (
@@ -296,33 +331,48 @@ export default function POS() {
       {completedSale && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-            <div className="bg-green-500 p-6 text-center text-white">
-              <CheckCircle size={48} className="mx-auto mb-2" />
-              <h2 className="text-2xl font-black">Sale Completed</h2>
-              <p className="font-bold opacity-80">Receipt #{completedSale.id}</p>
-            </div>
-            <div className="p-8 max-h-[50vh] overflow-auto">
-              <div className="text-center mb-6">
-                <h3 className="font-black text-xl text-slate-800">BillSpark POS</h3>
-                <p className="text-xs text-slate-400">{completedSale.date}</p>
+            <div id="print-receipt" className="bg-white">
+              <div className="bg-green-500 p-8 text-center text-white">
+                <CheckCircle size={48} className="mx-auto mb-2 no-print" />
+                <h3 className="text-2xl font-black">Sale Completed</h3>
+                <p className="font-bold opacity-80 uppercase tracking-widest text-xs">Receipt Order #{completedSale.id}</p>
               </div>
-              <div className="space-y-3 mb-6">
-                {completedSale.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-sm font-bold">
-                    <span className="text-slate-600">{item.qty}x {item.name}</span>
-                    <span className="text-slate-800">GHS {(item.qty * item.price).toFixed(2)}</span>
+              <div className="p-8 max-h-[60vh] overflow-auto print:max-h-none print:overflow-visible">
+                <div className="text-center mb-6">
+                  <img src="/BillSpark Logo.png" alt="Logo" className="h-12 w-auto mx-auto mb-4" />
+                  <h3 className="font-black text-2xl text-slate-800 uppercase tracking-tight">{JSON.parse(localStorage.getItem('billspark_settings') || '{}').name || 'BillSpark POS'}</h3>
+                  <p className="text-sm text-slate-500 font-bold">{JSON.parse(localStorage.getItem('billspark_settings') || '{}').address || 'Accra, Ghana'}</p>
+                  <p className="text-sm text-slate-500 font-bold">{JSON.parse(localStorage.getItem('billspark_settings') || '{}').phone || ''}</p>
+                  <div className="border-t border-slate-100 my-4"></div>
+                  <p className="text-xs text-slate-400 font-bold">{completedSale.date}</p>
+                </div>
+                <div className="space-y-3 mb-6">
+                  {completedSale.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm font-bold">
+                      <span className="text-slate-600">{item.qty}x {item.name}</span>
+                      <span className="text-slate-800">GHS {(item.qty * item.price).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t-2 border-dashed border-slate-200 pt-4 space-y-2">
+                  <div className="flex justify-between text-lg font-bold text-slate-500">
+                    <span>Subtotal</span>
+                    <span>GHS {completedSale.total.toFixed(2)}</span>
                   </div>
-                ))}
-              </div>
-              <div className="border-t-2 border-dashed border-slate-200 pt-4 flex justify-between text-2xl font-black text-blue-600">
-                <span>Total</span>
-                <span>GHS {completedSale.total.toFixed(2)}</span>
+                  <div className="flex justify-between text-2xl font-black text-blue-600">
+                    <span>Total</span>
+                    <span>GHS {completedSale.total.toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="mt-8 pt-4 border-t border-slate-100 text-center">
+                  <p className="text-[10px] font-black text-slate-300 uppercase letter tracking-widest">Powered by BillSpark POS</p>
+                </div>
               </div>
             </div>
-            <div className="p-6 bg-slate-50 grid grid-cols-2 gap-3 border-t border-slate-200">
-              <button onClick={shareReceiptWhatsApp} className="py-3 bg-green-600 text-white font-black rounded-xl flex items-center justify-center gap-2"><Share2 size={18} /> WhatsApp</button>
-              <button onClick={() => window.print()} className="py-3 bg-white border border-slate-200 font-black rounded-xl flex items-center justify-center gap-2 text-slate-700 font-sans"><Printer size={18} /> Print</button>
-              <button onClick={() => setCompletedSale(null)} className="col-span-2 py-4 bg-slate-800 text-white font-black rounded-xl mt-2 font-sans tracking-wide">NEW SALE</button>
+            <div className="p-6 bg-slate-50 grid grid-cols-2 gap-3 border-t border-slate-200 no-print">
+              <button onClick={shareReceiptWhatsApp} className="py-3 bg-green-600 text-white font-black rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95"><Share2 size={18} /> WhatsApp</button>
+              <button onClick={() => window.print()} className="py-3 bg-white border border-slate-200 font-black rounded-xl flex items-center justify-center gap-2 text-slate-700 transition-transform active:scale-95 text-sm font-sans tracking-tight"><Printer size={18} /> Print Receipt</button>
+              <button onClick={() => setCompletedSale(null)} className="col-span-2 py-4 bg-slate-800 text-white font-black rounded-xl mt-1 transition-transform active:scale-95 uppercase tracking-widest">Done / New Sale</button>
             </div>
           </div>
         </div>

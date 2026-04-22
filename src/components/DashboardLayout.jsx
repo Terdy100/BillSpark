@@ -7,7 +7,7 @@ const SidebarLink = ({ to, icon: Icon, label, current, onClick }) => (
   <Link 
     to={to} 
     onClick={onClick}
-    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${current ? 'bg-primary text-white shadow-lg shadow-blue-500/30' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'}`}
+    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${current ? 'bg-[#3b82f6] text-white shadow-lg shadow-blue-500/20' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'}`}
   >
     <Icon size={20} />
     <span className="font-semibold">{label}</span>
@@ -95,13 +95,17 @@ export default function DashboardLayout() {
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 lg:w-64 bg-white dark:bg-slate-900 lg:border-r border-slate-200 dark:border-slate-800 shadow-2xl lg:shadow-sm flex flex-col transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${menuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         
         <div className="p-6 hidden lg:block">
-          <img src="/BillSpark Logo.png" alt="BillSpark" className="h-10 w-auto" />
+          <Link to="/" className="block hover:opacity-80 transition-all active:scale-95">
+            <img src="/BillSpark Logo.png" alt="BillSpark" className="h-10 w-auto" />
+          </Link>
           <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-wide">Smart POS System</p>
         </div>
         
         {/* Mobile Header Inside Drawer */}
         <div className="p-6 lg:hidden flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-          <img src="/BillSpark Logo.png" alt="BillSpark" className="h-8 w-auto" />
+          <Link to="/" onClick={() => setMenuOpen(false)}>
+            <img src="/BillSpark Logo.png" alt="BillSpark" className="h-8 w-auto" />
+          </Link>
           <button onClick={() => setMenuOpen(false)} className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg"><X size={20}/></button>
         </div>
         
@@ -141,7 +145,7 @@ export default function DashboardLayout() {
 
       {/* Main App Content Area */}
       <main className="flex-1 overflow-auto bg-bg-base h-[calc(100vh-73px)] lg:h-screen w-full relative">
-        <div className="p-4 lg:p-8 h-full">
+        <div key={location.pathname} className="p-4 lg:p-8 h-full animate-in fade-in duration-500 slide-in-from-bottom-2">
           <Outlet />
         </div>
       </main>

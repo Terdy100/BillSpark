@@ -13,22 +13,36 @@ export default function Reports() {
     topStaff: []
   });
   const [timeRange, setTimeRange] = useState('7days');
+  const [customRange, setCustomRange] = useState({
+    from: new Date(new Date().setDate(new Date().getDate() - 14)).toISOString().split('T')[0],
+    to: new Date().toISOString().split('T')[0]
+  });
 
   useEffect(() => {
     loadReportData();
-  }, [timeRange]);
+  }, [timeRange, customRange]);
 
   const loadReportData = async () => {
     const now = new Date();
     let startDate = new Date();
+    let endDate = new Date();
     
     if (timeRange === '7days') startDate.setDate(now.getDate() - 7);
     else if (timeRange === '30days') startDate.setDate(now.getDate() - 30);
-    else startDate.setHours(0,0,0,0); // Today
+    else if (timeRange === 'custom') {
+      startDate = new Date(customRange.from);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(customRange.to);
+      endDate.setHours(23, 59, 59, 999);
+    }
+    else {
+      startDate.setHours(0,0,0,0); // Today
+      endDate.setHours(23, 59, 59, 999);
+    }
 
     const sales = await db.sales
       .where('created_at')
-      .above(startDate.toISOString())
+      .between(startDate.toISOString(), endDate.toISOString())
       .toArray();
 
     // 1. Process Daily Sales for Bar Chart
@@ -74,16 +88,37 @@ export default function Reports() {
           <p className="text-slate-500 font-medium mt-1">Real-time performance metrics.</p>
         </div>
         
-        <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-          {['today', '7days', '30days'].map(range => (
-            <button
-              key={range}
-              onClick={() => setTimeRange(range)}
-              className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${timeRange === range ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              {range === 'today' ? 'Today' : range === '7days' ? 'Last 7 Days' : 'Last 30 Days'}
-            </button>
-          ))}
+        <div className="flex flex-col md:flex-row gap-3 items-end">
+          {timeRange === 'custom' && (
+            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 animate-in slide-in-from-right-4">
+              <div className="px-3 py-1 text-[10px] font-black text-slate-400 uppercase">From</div>
+              <input 
+                type="date" 
+                value={customRange.from} 
+                onChange={(e) => setCustomRange({...customRange, from: e.target.value})}
+                className="bg-transparent border-none text-xs font-bold text-slate-600 focus:ring-0 outline-none p-1"
+              />
+              <div className="px-3 py-1 text-[10px] font-black text-slate-400 uppercase border-l border-slate-100">To</div>
+              <input 
+                type="date" 
+                value={customRange.to} 
+                onChange={(e) => setCustomRange({...customRange, to: e.target.value})}
+                className="bg-transparent border-none text-xs font-bold text-slate-600 focus:ring-0 outline-none p-1"
+              />
+            </div>
+          )}
+          
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+            {['today', '7days', '30days', 'custom'].map(range => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${timeRange === range ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                {range === 'today' ? 'Today' : range === '7days' ? '7 Days' : range === '30days' ? '30 Days' : 'Custom Range'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -97,9 +132,9 @@ export default function Reports() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales Chart */}
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px]">
           <h3 className="text-xl font-black text-slate-800 mb-8">Sales Volume</h3>
-          <div className="h-[300px] w-full">
+          <div className="h-[300px] w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.dailySales}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -116,9 +151,9 @@ export default function Reports() {
         </div>
 
         {/* Payment Methods Chart */}
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px]">
           <h3 className="text-xl font-black text-slate-800 mb-8">Payment Mix</h3>
-          <div className="h-[300px] w-full flex items-center justify-center">
+          <div className="h-[300px] w-full flex items-center justify-center min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
