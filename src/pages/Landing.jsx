@@ -1,7 +1,26 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Zap, WifiOff, BarChart3, Package } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Landing() {
+  const [mockIndex, setMockIndex] = useState(0);
+  
+  const mocks = [
+    { name: 'Verna Water (3x)', price: '15.00', profit: '+24% Weekly Profit', icon: BarChart3, color: 'text-orange-600', bg: 'bg-orange-100' },
+    { name: 'Indomie Pack (5x)', price: '25.00', profit: '+18% Day Growth', icon: Zap, color: 'text-blue-600', bg: 'bg-blue-100' },
+    { name: 'Coca Cola 1.5L', price: '12.00', profit: '120 Sales Today', icon: Package, color: 'text-green-600', bg: 'bg-green-100' },
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMockIndex(prev => (prev + 1) % mocks.length);
+    }, 7000); // 7 seconds for a more natural pace
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentMock = mocks[mockIndex];
+
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-hidden font-sans text-slate-800">
       {/* Background Orbs */}
@@ -68,29 +87,49 @@ export default function Landing() {
             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
           </div>
 
-          {/* Floating Transaction Animation */}
-          <div className="absolute -bottom-10 -left-6 bg-white p-6 rounded-3xl shadow-2xl border border-slate-50 animate-float max-w-[240px] z-20 hidden md:block">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-black">✓</div>
-              <div className="text-left">
-                <div className="text-xs font-black text-slate-400 uppercase">Sale Success</div>
-                <div className="text-sm font-bold text-slate-800">Verna Water (3x)</div>
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key={`sale-${mockIndex}`}
+              initial={{ opacity: 0, scale: 0.9, y: 40 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: -20 }}
+              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute -bottom-10 -left-6 bg-white/95 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 z-20 hidden md:block w-full max-w-[260px]"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-black">✓</div>
+                <div className="text-left">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sale Success</div>
+                  <div className="text-sm font-bold text-slate-800 line-clamp-1">{currentMock.name}</div>
+                </div>
               </div>
-            </div>
-            <div className="flex justify-between items-end">
-              <div className="text-xs font-bold text-slate-400">GHS 15.00 Paid</div>
-              <div className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black animate-pulse">PRINTING...</div>
-            </div>
-          </div>
+              <div className="flex justify-between items-end border-t border-slate-50 pt-3">
+                <div className="text-xs font-black text-slate-500">GHS {currentMock.price} Paid</div>
+                <div className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black animate-pulse" style={{ animationDuration: '4s' }}>PRINTING...</div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
 
-          {/* Floating Analytics Popups */}
-          <div className="absolute -top-10 -right-6 bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-white/50 animate-float animation-delay-2000 z-20 hidden md:block">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><BarChart3 size={20} /></div>
-              <div className="text-sm font-black text-left">+24% Weekly Profit</div>
-            </div>
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key={`stat-${mockIndex}`}
+              initial={{ opacity: 0, x: 40, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -20, scale: 0.9 }}
+              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+              className="absolute -top-10 -right-6 bg-white/95 backdrop-blur-md p-5 rounded-3xl shadow-2xl border border-white/50 z-20 hidden md:block w-full max-w-[240px]"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-2.5 ${currentMock.bg} ${currentMock.color} rounded-2xl shadow-sm`}><currentMock.icon size={22} /></div>
+                <div className="text-sm font-black text-left text-slate-800 leading-tight">
+                  {currentMock.profit}
+                  <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Real-time Stats</div>
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
+        
         {/* Features Grid */}
         <div className="grid md:grid-cols-4 gap-6 w-full text-left mt-24">
           <FeatureCard
