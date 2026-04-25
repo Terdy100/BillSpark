@@ -1,88 +1,89 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Zap } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/library';
 
 export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode", continuous = false }) {
   const [initError, setInitError] = useState(null);
   const [scanHistory, setScanHistory] = useState([]); // Track all scans in continuous mode
   const [lastDetected, setLastDetected] = useState(null); // Current flash feedback
-  const scannerRef = useRef(null);
+  const videoRef = useRef(null);
+  const codeReaderRef = useRef(null);
   const isMountedRef = useRef(true);
   const cooldownRef = useRef(false); // Prevent rapid duplicate scans
 
-  const startScanning = useCallback((html5QrCode) => {
-    const config = {
-      fps: 10,
-      qrbox: { width: 250, height: 250 },
-      aspectRatio: 1.0,
-      rememberLastUsedCamera: true,
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true
+  useEffect(() => {
+    isMountedRef.current = true;
+    codeReaderRef.current = new BrowserMultiFormatReader();
+
+    const startScanning = async () => {
+      try {
+        // Find back camera
+        const videoInputDevices = await codeReaderRef.current.listVideoInputDevices();
+        let selectedDeviceId = undefined;
+        
+        if (videoInputDevices.length > 0) {
+          // Try to find environment camera
+          const backCamera = videoInputDevices.find(device => 
+            device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('environment') ||
+            device.label.toLowerCase().includes('rear')
+          );
+          if (backCamera) {
+            selectedDeviceId = backCamera.deviceId;
+          } else {
+            // Default to the last one which is usually back on mobile
+            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+          }
+        }
+
+        codeReaderRef.current.decodeFromVideoDevice(
+          selectedDeviceId, 
+          videoRef.current, 
+          (result, err) => {
+            if (!isMountedRef.current) return;
+            if (result) {
+              if (cooldownRef.current) return;
+              
+              const code = result.getText().trim();
+              cooldownRef.current = true;
+
+              if (navigator.vibrate) navigator.vibrate(200);
+              setLastDetected(code);
+
+              if (continuous) {
+                setScanHistory(prev => [{ code, timestamp: Date.now() }, ...prev]);
+                onScan(code);
+
+                setTimeout(() => {
+                  if (isMountedRef.current) {
+                    setLastDetected(null);
+                    cooldownRef.current = false;
+                  }
+                }, 600);
+              } else {
+                setLastDetected(code);
+                onScan(code);
+                setTimeout(() => {
+                  if (isMountedRef.current) setLastDetected(null);
+                }, 800);
+              }
+            }
+          }
+        );
+      } catch (err) {
+        if (isMountedRef.current) setInitError(err.message || 'Camera failed to start.');
       }
     };
 
-    html5QrCode.start(
-      { facingMode: "environment" },
-      config,
-      (decodedText) => {
-        if (!isMountedRef.current || cooldownRef.current) return;
-
-        const code = decodedText.trim();
-        
-        // Cooldown to prevent the same barcode being scanned 10x in 1 second
-        cooldownRef.current = true;
-
-        // Vibrate + show feedback
-        if (navigator.vibrate) navigator.vibrate(200);
-        setLastDetected(code);
-
-        if (continuous) {
-          // In continuous mode: add to history, fire callback, then resume after brief flash
-          setScanHistory(prev => [{ code, timestamp: Date.now() }, ...prev]);
-          onScan(code);
-
-          // Clear the flash after 600ms, allow next scan
-          setTimeout(() => {
-            if (isMountedRef.current) {
-              setLastDetected(null);
-              cooldownRef.current = false;
-            }
-          }, 600);
-        } else {
-          // Fire callback immediately and show brief flash
-          setLastDetected(code);
-          onScan(code);
-          setTimeout(() => {
-            if (isMountedRef.current) setLastDetected(null);
-          }, 800);
-        }
-      },
-      (errorMsg) => {
-        // Ignore general tracking errors
-      }
-    ).catch((err) => {
-      if (isMountedRef.current) setInitError(err.message || 'Camera failed to start.');
-    });
-  }, [onScan, continuous]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    let html5QrCode = null;
-
-    import('html5-qrcode').then(({ Html5Qrcode }) => {
-      if (!isMountedRef.current) return;
-      
-      html5QrCode = new Html5Qrcode("scanner-camera");
-      scannerRef.current = html5QrCode;
-      startScanning(html5QrCode);
-    });
+    startScanning();
 
     return () => {
       isMountedRef.current = false;
-      if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().catch(() => {});
+      if (codeReaderRef.current) {
+        codeReaderRef.current.reset();
       }
     };
-  }, [startScanning]);
+  }, [onScan, continuous]);
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
@@ -95,6 +96,23 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       } else {
         onScan(val);
       }
+    }
+  };
+
+  const toggleTorch = async () => {
+    try {
+      const track = videoRef.current?.srcObject?.getVideoTracks()[0];
+      if (track) {
+        const capabilities = track.getCapabilities();
+        if (capabilities.torch) {
+          const currentTorch = track.getSettings().torch;
+          await track.applyConstraints({
+            advanced: [{ torch: !currentTorch }]
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Torch not supported", e);
     }
   };
 
@@ -130,7 +148,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
               <p className="text-slate-500 font-bold text-xs uppercase tracking-wider">
-                {continuous ? 'Continuous Mode — Keep Scanning' : 'Free Engine v3.0'}
+                {continuous ? 'Continuous Mode — Keep Scanning' : 'Pro Engine (ZXing)'}
               </p>
             </div>
           </div>
@@ -141,14 +159,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
               </span>
             )}
             <button 
-              onClick={async () => {
-                try {
-                  const state = scannerRef.current.getTorchState();
-                  await scannerRef.current.applyVideoConstraints({ focusMode: "continuous", torch: !state });
-                } catch (e) {
-                  console.warn("Torch not supported", e);
-                }
-              }}
+              onClick={toggleTorch}
               className="p-3 bg-slate-200 hover:bg-yellow-100 text-slate-600 hover:text-yellow-600 rounded-xl transition-all"
               title="Toggle Flash"
             >
@@ -193,8 +204,14 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             </div>
           ) : (
             <>
-              {/* HTML5-QRCode Target */}
-              <div id="scanner-camera" className="w-full h-full absolute inset-0 [&>video]:w-full [&>video]:h-full [&>video]:object-cover"></div>
+              {/* ZXing Video Target - Important attributes for iOS */}
+              <video 
+                ref={videoRef}
+                className="w-full h-full absolute inset-0 object-cover"
+                autoPlay 
+                playsInline 
+                muted
+              />
               
               {/* Scan Zone UI */}
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/40">
