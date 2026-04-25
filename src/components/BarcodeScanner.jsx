@@ -17,8 +17,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       rememberLastUsedCamera: true,
       experimentalFeatures: {
         useBarCodeDetectorIfSupported: true
-      },
-      supportedScanTypes: [0]
+      }
     };
 
     html5QrCode.start(
