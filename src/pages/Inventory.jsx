@@ -30,6 +30,12 @@ export default function Inventory() {
       : (adjustingStock.product.stock_qty || 0) - qty;
 
     try {
+      if (navigator.onLine && typeof adjustingStock.product.id === 'string' && adjustingStock.product.id.length > 20) {
+        // We need supabase, let's import it if not present
+        const { supabase } = await import('../lib/supabase');
+        await supabase.from('products').update({ stock_qty: Math.max(0, newQty) }).eq('id', adjustingStock.product.id);
+      }
+      
       await db.products_cache.update(adjustingStock.product.id, { stock_qty: Math.max(0, newQty) });
       setAdjustingStock(null);
       setAdjustmentQty('');

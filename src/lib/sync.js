@@ -52,6 +52,16 @@ export const syncData = async () => {
           // If items fail, we don't mark as synced so we can try again
           continue; 
         }
+
+        // Deduct stock in Supabase products table
+        for (const item of itemsToSync) {
+          // Fetch current stock from cloud to prevent race condition overrides if possible
+          const { data: prodData } = await supabase.from('products').select('stock_qty').eq('id', item.product_id).single();
+          if (prodData) {
+            const newStock = Math.max(0, (prodData.stock_qty || 0) - item.qty);
+            await supabase.from('products').update({ stock_qty: newStock }).eq('id', item.product_id);
+          }
+        }
       }
       
       // 3. Mark synced locally
@@ -114,12 +124,19 @@ export const pullSalesAndCache = async (businessId) => {
       console.warn("Inner join fetch failed for sale_items, falling back to IN clause", itemsError);
       const saleIds = cloudSales.map(s => s.id);
       if (saleIds.length > 0) {
-        // Supabase has a limit on IN clause, chunk it if necessary, but this is an MVP
-        const { data: fallbackItems } = await supabase
-          .from('sale_items')
-          .select('*')
-          .in('sale_id', saleIds);
-        itemsToSync = fallbackItems || [];
+        // Chunk saleIds to prevent URI Too Long errors
+        itemsToSync = [];
+        const chunkSize = 200;
+        for (let i = 0; i < saleIds.length; i += chunkSize) {
+          const chunk = saleIds.slice(i, i + chunkSize);
+          const { data: fallbackItems } = await supabase
+            .from('sale_items')
+            .select('*')
+            .in('sale_id', chunk);
+          if (fallbackItems) {
+            itemsToSync.push(...fallbackItems);
+          }
+        }
       } else {
         itemsToSync = [];
       }

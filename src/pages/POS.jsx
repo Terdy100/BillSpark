@@ -134,6 +134,10 @@ export default function POS() {
       return alert('Enter valid amount received for cash payment');
     }
 
+    // Get guaranteed latest session to ensure business_id is accurate
+    const { data: { session } } = await supabase.auth.getSession();
+    const businessId = session?.user?.id || currentUser?.id || 'offline_bus';
+
     const itemsData = activeBasket.items.map(i => ({
       product_id: i.id,
       qty: i.qty,
@@ -145,7 +149,7 @@ export default function POS() {
     const totalCost = itemsData.reduce((sum, item) => sum + (item.cost_price * item.qty), 0);
 
     const saleData = {
-      business_id: currentUser?.id || 'offline_bus',
+      business_id: businessId,
       total,
       total_cost: totalCost,
       payment_type: paymentType,

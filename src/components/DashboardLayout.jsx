@@ -77,9 +77,25 @@ export default function DashboardLayout() {
   }, []);
 
   const handleLogout = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const deviceId = localStorage.getItem('billspark_device_id');
+        const devices = session.user.user_metadata?.devices || [];
+        if (deviceId && devices.includes(deviceId)) {
+          const newDevices = devices.filter(id => id !== deviceId);
+          await supabase.auth.updateUser({
+            data: { devices: newDevices }
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Logout cleanup error:', e);
+    }
     await supabase.auth.signOut();
     navigate('/login');
   };
+
 
   return (
     <div className="flex flex-col lg:flex-row h-screen bg-bg-base overflow-hidden">
