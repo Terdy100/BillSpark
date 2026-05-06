@@ -87,3 +87,84 @@ export const pullProductsAndCache = async (businessId) => {
     });
   }
 };
+
+export const pullSalesAndCache = async (businessId) => {
+  if (!navigator.onLine) return;
+
+  try {
+    // 1. Fetch all sales for this business
+    const { data: cloudSales, error: salesError } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('business_id', businessId);
+
+    if (salesError) throw salesError;
+    if (!cloudSales || cloudSales.length === 0) return;
+
+    // 2. Fetch all sale items for this business
+    const { data: cloudItems, error: itemsError } = await supabase
+      .from('sale_items')
+      .select('*, sales!inner(business_id)')
+      .eq('sales.business_id', businessId);
+    
+    // Note: If the inner join fails due to PostgREST config, we could fetch items using an in-clause:
+    // .in('sale_id', cloudSales.map(s => s.id))
+    let itemsToSync = cloudItems;
+    if (itemsError || !cloudItems) {
+      console.warn("Inner join fetch failed for sale_items, falling back to IN clause", itemsError);
+      const saleIds = cloudSales.map(s => s.id);
+      if (saleIds.length > 0) {
+        // Supabase has a limit on IN clause, chunk it if necessary, but this is an MVP
+        const { data: fallbackItems } = await supabase
+          .from('sale_items')
+          .select('*')
+          .in('sale_id', saleIds);
+        itemsToSync = fallbackItems || [];
+      } else {
+        itemsToSync = [];
+      }
+    } else {
+      // Remove the joined sales object from items if it exists
+      itemsToSync = cloudItems.map(item => {
+        const { sales, ...rest } = item;
+        return rest;
+      });
+    }
+
+    // 3. Merge into local DB
+    await db.transaction('rw', db.sales, db.sale_items, async () => {
+      // Keep only unsynced sales and their items
+      const unsyncedSales = await db.sales.where('synced').equals(0).toArray();
+      const unsyncedSaleIds = new Set(unsyncedSales.map(s => s.id));
+      
+      const allLocalItems = await db.sale_items.toArray();
+      const unsyncedItems = allLocalItems.filter(item => unsyncedSaleIds.has(item.sale_id));
+
+      // Clear local tables
+      await db.sales.clear();
+      await db.sale_items.clear();
+
+      // Put back unsynced local data
+      if (unsyncedSales.length > 0) {
+        await db.sales.bulkPut(unsyncedSales);
+      }
+      if (unsyncedItems.length > 0) {
+        await db.sale_items.bulkPut(unsyncedItems);
+      }
+      
+      // Put cloud data
+      const cloudSalesToAdd = cloudSales.map(cs => ({ ...cs, synced: 1 }));
+      if (cloudSalesToAdd.length > 0) {
+        await db.sales.bulkPut(cloudSalesToAdd);
+      }
+      
+      if (itemsToSync.length > 0) {
+        await db.sale_items.bulkPut(itemsToSync);
+      }
+    });
+
+    console.log('Successfully pulled sales from cloud');
+  } catch (error) {
+    console.error('Error pulling sales:', error);
+  }
+};

@@ -58,13 +58,15 @@ export default function DashboardLayout() {
       if (session?.user?.id) {
         await triggerSync();
         try {
-          const { pullProductsAndCache } = await import('../lib/sync');
+          const { pullProductsAndCache, pullSalesAndCache } = await import('../lib/sync');
           await pullProductsAndCache(session.user.id);
+          await pullSalesAndCache(session.user.id);
         } catch (e) {
-          console.error('Initial product fetch error:', e);
+          console.error('Initial data fetch error:', e);
         }
       }
     };
+
     
     initData();
 

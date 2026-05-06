@@ -31,11 +31,40 @@ export default function Login() {
            return;
         }
 
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: authData, error } = await supabase.auth.signInWithPassword({
           email,
           password
         });
         if (error) throw error;
+
+        // Device Limit Logic
+        const user = authData.user;
+        if (user) {
+          let deviceId = localStorage.getItem('billspark_device_id');
+          if (!deviceId) {
+            deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('billspark_device_id', deviceId);
+          }
+
+          const devices = user.user_metadata?.devices || [];
+          
+          if (!devices.includes(deviceId)) {
+            if (devices.length >= 2) {
+              await supabase.auth.signOut();
+              throw new Error('Device limit reached. You can only use this account on up to 2 devices. Please upgrade or contact support to add more shops.');
+            } else {
+              // Add device
+              const newDevices = [...devices, deviceId];
+              const { error: updateError } = await supabase.auth.updateUser({
+                data: { devices: newDevices }
+              });
+              if (updateError) {
+                console.error('Error updating devices:', updateError);
+              }
+            }
+          }
+        }
+
         navigate('/app');
       }
     } catch (err) {
@@ -44,6 +73,7 @@ export default function Login() {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
