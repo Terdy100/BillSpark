@@ -82,18 +82,28 @@ export default function DashboardLayout() {
       if (session?.user) {
         const deviceId = localStorage.getItem('billspark_device_id');
         const devices = session.user.user_metadata?.devices || [];
+        
         if (deviceId && devices.includes(deviceId)) {
           const newDevices = devices.filter(id => id !== deviceId);
-          await supabase.auth.updateUser({
+          
+          // Attempt metadata update with a short timeout, don't wait for it if it's slow
+          const updatePromise = supabase.auth.updateUser({
             data: { devices: newDevices }
           });
+          
+          const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1500));
+          
+          // We don't necessarily need to wait for this to finish to sign out
+          // but we'll give it a moment
+          await Promise.race([updatePromise, timeoutPromise]);
         }
       }
     } catch (e) {
       console.error('Logout cleanup error:', e);
+    } finally {
+      await supabase.auth.signOut();
+      navigate('/login');
     }
-    await supabase.auth.signOut();
-    navigate('/login');
   };
 
 

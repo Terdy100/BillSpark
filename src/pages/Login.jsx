@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import { Store } from 'lucide-react';
+import { getDeviceId } from '../utils/device';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -40,26 +41,27 @@ export default function Login() {
         // Device Limit Logic
         const user = authData.user;
         if (user) {
-          let deviceId = localStorage.getItem('billspark_device_id');
-          if (!deviceId) {
-            deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('billspark_device_id', deviceId);
-          }
-
+          const { id: deviceId, fingerprint } = getDeviceId(user.user_metadata);
           const devices = user.user_metadata?.devices || [];
           
-          if (!devices.includes(deviceId)) {
-            if (devices.length >= 2) {
+          const isRegistered = devices.some(d => {
+            if (typeof d === 'string') return d === deviceId;
+            return d.id === deviceId;
+          });
+
+          if (!isRegistered) {
+            // Increased limit to 3 for better user flexibility
+            if (devices.length >= 3) {
               await supabase.auth.signOut();
-              throw new Error('Device limit reached. You can only use this account on up to 2 devices. Please upgrade or contact support to add more shops.');
+              throw new Error('Device limit reached. You can only use this account on up to 3 devices. Please log out from another device or contact support.');
             } else {
-              // Add device
-              const newDevices = [...devices, deviceId];
+              // Add device with fingerprint for stability
+              const newDevices = [...devices, { id: deviceId, fp: fingerprint }];
               const { error: updateError } = await supabase.auth.updateUser({
                 data: { devices: newDevices }
               });
               if (updateError) {
-                console.error('Error updating devices:', updateError);
+                console.warn('Metadata update failed, but proceeding with login:', updateError);
               }
             }
           }

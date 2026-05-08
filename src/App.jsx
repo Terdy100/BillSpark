@@ -14,53 +14,90 @@ import Reports from './pages/Reports';
 import SalesHistory from './pages/SalesHistory';
 import Settings from './pages/Settings';
 
+import { getDeviceId } from './utils/device';
+
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deviceError, setDeviceError] = useState(null);
 
+  const handleResetDevices = async () => {
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (currentSession?.user) {
+        const { id, fingerprint } = getDeviceId();
+        const { error } = await supabase.auth.updateUser({
+          data: { devices: [{ id, fp: fingerprint }] }
+        });
+        if (error) throw error;
+        window.location.reload();
+      }
+    } catch (e) {
+      alert('Failed to reset devices. Please try again or contact support.');
+    }
+  };
+
   useEffect(() => {
     const checkDeviceLimit = async (sessionData) => {
-      if (!sessionData?.user) return true;
-      if (sessionData.user.email === 'demo@billspark.com') return true; // Skip demo account
+      try {
+        if (!sessionData?.user) return true;
+        if (sessionData.user.email === 'demo@billspark.com') return true;
 
-      let deviceId = localStorage.getItem('billspark_device_id');
-      if (!deviceId) {
-        deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('billspark_device_id', deviceId);
-      }
+        const { id: deviceId, fingerprint } = getDeviceId(sessionData.user.user_metadata);
+        const devices = sessionData.user.user_metadata?.devices || [];
+        
+        const isRegistered = devices.some(d => {
+          if (typeof d === 'string') return d === deviceId;
+          return d.id === deviceId;
+        });
 
-      const devices = sessionData.user.user_metadata?.devices || [];
-      
-      if (!devices.includes(deviceId)) {
-        if (devices.length >= 2) {
-          await supabase.auth.signOut();
-          setDeviceError('Device limit reached. You can only use this account on up to 2 devices. Please upgrade or contact support to add more shops.');
-          setSession(null);
-          return false;
-        } else {
-          const newDevices = [...devices, deviceId];
-          await supabase.auth.updateUser({
-            data: { devices: newDevices }
-          });
-          // Update local session metadata just in case
-          sessionData.user.user_metadata = { ...sessionData.user.user_metadata, devices: newDevices };
+        if (!isRegistered) {
+          if (devices.length >= 3) {
+            const signOutPromise = supabase.auth.signOut();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000));
+            
+            try {
+              await Promise.race([signOutPromise, timeoutPromise]);
+            } catch (e) {
+              console.warn("Sign out during limit check took too long or failed");
+            }
+
+            setDeviceError('Device limit reached. You can only use this account on up to 3 devices.');
+            setSession(null);
+            return false;
+          } else {
+            const newDevices = [...devices, { id: deviceId, fp: fingerprint }];
+            supabase.auth.updateUser({
+              data: { devices: newDevices }
+            }).catch(err => console.error("Failed to update devices metadata:", err));
+            
+            if (sessionData.user.user_metadata) {
+              sessionData.user.user_metadata.devices = newDevices;
+            }
+          }
         }
+        return true;
+      } catch (err) {
+        console.error("Device limit check error:", err);
+        return true;
       }
-      return true;
     };
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const allowed = await checkDeviceLimit(session);
-      if (allowed) {
-        setSession(session);
+    const initAuth = async () => {
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const allowed = await checkDeviceLimit(initialSession);
+        if (allowed) {
+          setSession(initialSession);
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }).catch(err => {
-      console.warn("Supabase auth error handled:", err);
-      setSession(null);
-      setLoading(false);
-    });
+    };
+
+    initAuth();
 
     const {
       data: { subscription },
@@ -87,12 +124,20 @@ function App() {
           </div>
           <h2 className="text-2xl font-black text-slate-800 mb-2">Access Denied</h2>
           <p className="text-slate-600 font-medium mb-6">{deviceError}</p>
-          <button 
-            onClick={() => setDeviceError(null)}
-            className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            Back to Login
-          </button>
+          <div className="space-y-3">
+            <button 
+              onClick={() => setDeviceError(null)}
+              className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Back to Login
+            </button>
+            <button 
+              onClick={handleResetDevices}
+              className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
+            >
+              Reset All Devices
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -102,14 +147,12 @@ function App() {
     return <div className="flex h-screen items-center justify-center font-bold text-xl">Loading BillSpark...</div>;
   }
 
-
   return (
     <Router>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={!session ? <Login /> : <Navigate to="/app" />} />
         
-        {/* Protected Routes */}
         <Route path="/app" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="pos" element={<POS />} />
