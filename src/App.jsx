@@ -16,15 +16,16 @@ import Settings from './pages/Settings';
 
 import { getDeviceId } from './utils/device';
 
+
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deviceError, setDeviceError] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const handleResetDevices = async () => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (currentSession?.user) {
+      if (currentUser) {
         const { id, fingerprint } = getDeviceId();
         const { error } = await supabase.auth.updateUser({
           data: { devices: [{ id, fp: fingerprint }] }
@@ -41,7 +42,11 @@ function App() {
     const checkDeviceLimit = async (sessionData) => {
       try {
         if (!sessionData?.user) return true;
-        if (sessionData.user.email === 'demo@billspark.com') return true;
+        setCurrentUser(sessionData.user);
+        
+        // Demo account or Admin users skip the check
+        const isAdmin = sessionData.user.user_metadata?.is_admin === true;
+        if (sessionData.user.email === 'demo@billspark.com' || isAdmin) return true;
 
         const { id: deviceId, fingerprint } = getDeviceId(sessionData.user.user_metadata);
         const devices = sessionData.user.user_metadata?.devices || [];
@@ -53,19 +58,16 @@ function App() {
 
         if (!isRegistered) {
           if (devices.length >= 3) {
-            const signOutPromise = supabase.auth.signOut();
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000));
-            
-            try {
-              await Promise.race([signOutPromise, timeoutPromise]);
-            } catch (e) {
-              console.warn("Sign out during limit check took too long or failed");
+            // Only sign out regular users. Admins stay in to use the Reset button.
+            if (!isAdmin) {
+              await supabase.auth.signOut();
             }
 
             setDeviceError('Device limit reached. You can only use this account on up to 3 devices.');
             setSession(null);
             return false;
-          } else {
+          }
+ else {
             const newDevices = [...devices, { id: deviceId, fp: fingerprint }];
             supabase.auth.updateUser({
               data: { devices: newDevices }
@@ -123,7 +125,12 @@ function App() {
             </svg>
           </div>
           <h2 className="text-2xl font-black text-slate-800 mb-2">Access Denied</h2>
-          <p className="text-slate-600 font-medium mb-6">{deviceError}</p>
+          <p className="text-slate-600 font-medium mb-6">
+            {deviceError}
+            {!currentUser?.user_metadata?.is_admin && (
+              <span className="block mt-2 text-sm text-slate-400">Please contact support or your shop administrator to reset your devices.</span>
+            )}
+          </p>
           <div className="space-y-3">
             <button 
               onClick={() => setDeviceError(null)}
@@ -131,12 +138,14 @@ function App() {
             >
               Back to Login
             </button>
-            <button 
-              onClick={handleResetDevices}
-              className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
-            >
-              Reset All Devices
-            </button>
+            {currentUser?.user_metadata?.is_admin && (
+              <button 
+                onClick={handleResetDevices}
+                className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Reset All My Devices
+              </button>
+            )}
           </div>
         </div>
       </div>
