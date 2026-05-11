@@ -19,10 +19,11 @@ export default function Settings() {
     receiptFooter: 'Thank you for shopping with us!'
   });
 
-  // Admin Panel States
   const [adminSearchEmail, setAdminSearchEmail] = useState('');
   const [adminActionLoading, setAdminActionLoading] = useState(false);
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
+  const [allUsers, setAllUsers] = useState([]);
+  const [fetchingUsers, setFetchingUsers] = useState(false);
 
   const handleSave = () => {
     localStorage.setItem('billspark_settings', JSON.stringify(shopInfo));
@@ -46,6 +47,20 @@ export default function Settings() {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user?.user_metadata?.is_admin) {
       setIsAdmin(true);
+      fetchUsersList(); // Fetch users if admin
+    }
+  };
+
+  const fetchUsersList = async () => {
+    setFetchingUsers(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_list_users');
+      if (error) throw error;
+      setAllUsers(data || []);
+    } catch (e) {
+      console.warn('Could not fetch user list. Make sure admin_list_users RPC is installed.', e);
+    } finally {
+      setFetchingUsers(false);
     }
   };
 
@@ -100,24 +115,26 @@ export default function Settings() {
   };
 
   // Admin Actions
-  const handleAdminResetUser = async () => {
-    if (!adminSearchEmail) return;
-    if (!confirm(`Are you sure you want to reset ALL devices for ${adminSearchEmail}?`)) return;
+  const handleAdminResetUser = async (email = null) => {
+    const targetEmail = email || adminSearchEmail;
+    if (!targetEmail) return;
+    if (!confirm(`Are you sure you want to reset ALL devices for ${targetEmail}?`)) return;
 
     setAdminActionLoading(true);
     setAdminMessage({ type: '', text: '' });
     
     try {
       const { data, error } = await supabase.rpc('admin_reset_user_devices', { 
-        target_email: adminSearchEmail.trim().toLowerCase() 
+        target_email: targetEmail.trim().toLowerCase() 
       });
 
       if (error) throw error;
       if (data.error) {
         setAdminMessage({ type: 'error', text: data.error });
       } else {
-        setAdminMessage({ type: 'success', text: `Successfully reset devices for ${adminSearchEmail}` });
-        setAdminSearchEmail('');
+        setAdminMessage({ type: 'success', text: `Successfully reset devices for ${targetEmail}` });
+        if (!email) setAdminSearchEmail('');
+        fetchUsersList(); // Refresh list
       }
     } catch (e) {
       setAdminMessage({ type: 'error', text: 'Failed to communicate with server. Make sure you have run the SQL setup.' });
@@ -126,15 +143,15 @@ export default function Settings() {
     }
   };
 
-  const handleAdminToggleRole = async (makeAdmin) => {
-    if (!adminSearchEmail) return;
+  const handleAdminToggleRole = async (targetEmail, makeAdmin) => {
+    if (!targetEmail) return;
     const action = makeAdmin ? 'Grant Admin' : 'Revoke Admin';
-    if (!confirm(`${action} for ${adminSearchEmail}?`)) return;
+    if (!confirm(`${action} for ${targetEmail}?`)) return;
 
     setAdminActionLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_set_user_role', { 
-        target_email: adminSearchEmail.trim().toLowerCase(),
+        target_email: targetEmail.trim().toLowerCase(),
         make_admin: makeAdmin
       });
 
@@ -142,7 +159,8 @@ export default function Settings() {
       if (data.error) {
         setAdminMessage({ type: 'error', text: data.error });
       } else {
-        setAdminMessage({ type: 'success', text: `Successfully updated role for ${adminSearchEmail}` });
+        setAdminMessage({ type: 'success', text: `Successfully updated role for ${targetEmail}` });
+        fetchUsersList(); // Refresh list
       }
     } catch (e) {
       setAdminMessage({ type: 'error', text: 'Operation failed.' });
@@ -282,37 +300,47 @@ export default function Settings() {
           )}
 
           {activeTab === 'admin' && (
-            <div className="space-y-8 max-w-2xl">
-              <div>
-                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                  <Shield className="text-blue-600" size={24} />
-                  Admin Management
-                </h3>
-                <p className="text-slate-500 font-medium mt-1">Search for users and manage their access limits.</p>
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    <Shield className="text-blue-600" size={24} />
+                    Admin Management
+                  </h3>
+                  <p className="text-slate-500 font-medium mt-1">Manage every user's device access and roles.</p>
+                </div>
+                <button 
+                  onClick={fetchUsersList}
+                  disabled={fetchingUsers}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                >
+                  <RefreshCw size={20} className={fetchingUsers ? 'animate-spin' : ''} />
+                </button>
               </div>
 
-              <div className="space-y-4">
+              {adminMessage.text && (
+                <div className={`p-4 rounded-2xl font-bold text-sm ${adminMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                  {adminMessage.text}
+                </div>
+              )}
+
+              {/* Quick Search */}
+              <div className="space-y-4 max-w-2xl">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                   <input 
                     type="email" 
-                    placeholder="Search user by email..."
+                    placeholder="Search user by email to add/reset..."
                     value={adminSearchEmail}
                     onChange={(e) => setAdminSearchEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold focus:border-blue-400 transition-colors"
                   />
                 </div>
 
-                {adminMessage.text && (
-                  <div className={`p-4 rounded-2xl font-bold text-sm ${adminMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-                    {adminMessage.text}
-                  </div>
-                )}
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button 
                     disabled={!adminSearchEmail || adminActionLoading}
-                    onClick={handleAdminResetUser}
+                    onClick={() => handleAdminResetUser()}
                     className="flex items-center justify-center gap-2 p-4 bg-red-50 text-red-600 font-black rounded-2xl hover:bg-red-100 transition-colors disabled:opacity-50"
                   >
                     {adminActionLoading ? 'Processing...' : (
@@ -321,7 +349,7 @@ export default function Settings() {
                   </button>
                   <button 
                     disabled={!adminSearchEmail || adminActionLoading}
-                    onClick={() => handleAdminToggleRole(true)}
+                    onClick={() => handleAdminToggleRole(adminSearchEmail, true)}
                     className="flex items-center justify-center gap-2 p-4 bg-blue-50 text-blue-600 font-black rounded-2xl hover:bg-blue-100 transition-colors disabled:opacity-50"
                   >
                     Grant Admin Access
@@ -329,9 +357,72 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+              {/* Users List */}
+              <div className="mt-8">
+                <h4 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Every Other User ({allUsers.length})</h4>
+                <div className="overflow-hidden border border-slate-100 rounded-3xl shadow-sm">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase">User Email</th>
+                        <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase text-center">Devices</th>
+                        <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase">Role</th>
+                        <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 bg-white">
+                      {allUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" className="px-6 py-12 text-center text-slate-400 font-bold italic">
+                            No users found. Try searching above or refresh.
+                          </td>
+                        </tr>
+                      ) : (
+                        allUsers.map((u, i) => (
+                          <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-4 font-bold text-slate-700">{u.email}</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-black ${u.device_count >= 3 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                {u.device_count || 0} / 3
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {u.is_admin ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100">
+                                  <Shield size={12} /> Admin
+                                </span>
+                              ) : (
+                                <span className="text-xs font-bold text-slate-400">User</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right space-x-2">
+                              <button 
+                                onClick={() => handleAdminResetUser(u.email)}
+                                title="Reset Devices"
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                              <button 
+                                onClick={() => handleAdminToggleRole(u.email, !u.is_admin)}
+                                title={u.is_admin ? "Revoke Admin" : "Grant Admin"}
+                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                <User size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 max-w-2xl">
                 <h4 className="font-black text-slate-800 mb-2">How it works</h4>
                 <ul className="text-sm text-slate-500 font-medium space-y-2 list-disc pl-4">
+                  <li><strong>Every Other User</strong>: You can see all users and their current device counts.</li>
                   <li><strong>Reset Device Limit</strong>: Completely clears a user's registered devices, allowing them to log in on new ones.</li>
                   <li><strong>Grant Admin</strong>: Elevates a user so they can see this panel and bypass their own device limits.</li>
                   <li>Actions are irreversible and logged in the system.</li>
