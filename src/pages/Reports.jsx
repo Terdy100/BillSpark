@@ -138,7 +138,7 @@ export default function Reports() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales Chart */}
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px]">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px] min-w-0">
           <h3 className="text-xl font-black text-slate-800 mb-8">Sales Volume</h3>
           <div className="h-[300px] w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -157,7 +157,7 @@ export default function Reports() {
         </div>
 
         {/* Payment Methods Chart */}
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px]">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px] min-w-0">
           <h3 className="text-xl font-black text-slate-800 mb-8">Payment Mix</h3>
           <div className="h-[300px] w-full flex items-center justify-center min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">

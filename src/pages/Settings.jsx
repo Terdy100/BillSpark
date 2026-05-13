@@ -198,7 +198,9 @@ export default function Settings() {
         <div className="w-full lg:w-64 space-y-2">
           <TabButton active={activeTab === 'business'} onClick={() => setActiveTab('business')} icon={SettingsIcon} label="Business Profile" />
           <TabButton active={activeTab === 'receipt'} onClick={() => setActiveTab('receipt')} icon={Smartphone} label="Receipt Settings" />
-          <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={User} label="Devices & Access" />
+          {isAdmin && (
+            <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={User} label="Devices & Access" />
+          )}
           <TabButton active={activeTab === 'backup'} onClick={() => setActiveTab('backup')} icon={Download} label="Data & Backup" />
           {isAdmin && (
             <TabButton active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} icon={Shield} label="Admin Panel" />
