@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Smartphone, Save, User, Bell, Download, AlertCircle, Shield, Search, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, Smartphone, Save, User, Bell, Download, AlertCircle, Shield, Search, Trash2, RefreshCw } from 'lucide-react';
 import { db } from '../lib/offline';
 import { supabase } from '../lib/supabase';
 import { getDeviceId } from '../utils/device';

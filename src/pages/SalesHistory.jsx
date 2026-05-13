@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/offline';
+import { supabase } from '../lib/supabase';
 import { Calendar, ShoppingBag, Receipt, ChevronRight, Share2, Printer, Search, X, CheckCircle2, Clock } from 'lucide-react';
 
 export default function SalesHistory() {
