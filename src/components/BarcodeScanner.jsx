@@ -22,17 +22,17 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         let selectedDeviceId = undefined;
         
         if (videoInputDevices.length > 0) {
-          // Try to find environment camera
+          // Priority 1: Specifically look for the main back camera
           const backCamera = videoInputDevices.find(device => 
-            device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('environment') ||
-            device.label.toLowerCase().includes('rear')
+            /back|rear|environment/i.test(device.label) && !/wide|tele|ultra/i.test(device.label)
           );
+          
           if (backCamera) {
             selectedDeviceId = backCamera.deviceId;
           } else {
-            // Default to the last one which is usually back on mobile
-            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+            // Priority 2: Any back camera
+            const anyBack = videoInputDevices.find(device => /back|rear|environment/i.test(device.label));
+            selectedDeviceId = anyBack ? anyBack.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
           }
         }
 
@@ -218,11 +218,17 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
                 <div className="w-[250px] h-[250px] border-[4px] border-white/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center bg-transparent overflow-hidden">
                   <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_20px_rgba(239,68,68,1)] laser-sweep rounded-full"></div>
                 </div>
-                {continuous && (
-                  <p className="mt-4 text-white/80 font-bold text-sm bg-black/50 px-4 py-2 rounded-full">
-                    Point at next item — scanning continuously
-                  </p>
-                )}
+                
+                <div className="mt-8 flex flex-col items-center gap-3">
+                  <div className="px-4 py-2 bg-blue-600 text-white text-sm font-black rounded-full shadow-lg flex items-center gap-2 animate-bounce">
+                    <span>Move back slightly if blurry</span>
+                  </div>
+                  {continuous && (
+                    <p className="text-white/80 font-bold text-xs bg-black/50 px-4 py-2 rounded-full">
+                      Scanning continuously...
+                    </p>
+                  )}
+                </div>
               </div>
             </>
           )}
