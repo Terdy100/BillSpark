@@ -1,230 +1,171 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Zap, RefreshCw } from 'lucide-react';
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
+import React, { useEffect, useState, useRef } from 'react';
+import { Zap, RefreshCw, X } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode", continuous = false }) {
   const [initError, setInitError] = useState(null);
-  const [scanHistory, setScanHistory] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
   const [lastDetected, setLastDetected] = useState(null);
-  const [availableCameras, setAvailableCameras] = useState([]);
-  const [currentCameraIndex, setCurrentCameraIndex] = useState(() => {
-    // Remember which camera was used last time
-    const saved = localStorage.getItem('billspark_camera_index');
-    return saved ? parseInt(saved, 10) : 0;
-  });
+  const [cameras, setCameras] = useState([]);
+  const [currentCameraId, setCurrentCameraId] = useState(null);
   
-  const videoRef = useRef(null);
-  const codeReaderRef = useRef(null);
-  const isMountedRef = useRef(true);
-  const cooldownRef = useRef(false);
+  const scannerRef = useRef(null);
+  const containerId = "scanner-container-" + Math.random().toString(36).substr(2, 9);
 
-  // Initialize Reader and Get Cameras
   useEffect(() => {
-    isMountedRef.current = true;
-    
-    // Configure formats and "Try Harder" mode
-    const hints = new Map();
-    const formats = [
-      BarcodeFormat.QR_CODE,
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E,
-      BarcodeFormat.ITF,
-      BarcodeFormat.DATA_MATRIX
-    ];
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, formats);
-    hints.set(DecodeHintType.TRY_HARDER, true);
-    
-    codeReaderRef.current = new BrowserMultiFormatReader(hints);
-    
-    const getCameras = async () => {
-      try {
-        const devices = await codeReaderRef.current.listVideoInputDevices();
-        // Filter for cameras that look like back cameras
-        const backCameras = devices.filter(d => /back|rear|environment/i.test(d.label) || d.label === '');
-        setAvailableCameras(backCameras.length > 0 ? backCameras : devices);
-      } catch (e) {
-        setInitError("Permissions denied or no cameras found.");
+    // 1. Get available cameras
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length > 0) {
+        setCameras(devices);
+        // Prioritize back cameras
+        const back = devices.find(d => /back|rear|environment/i.test(d.label));
+        const savedId = localStorage.getItem('billspark_camera_id');
+        const initialId = savedId || (back ? back.id : devices[0].id);
+        setCurrentCameraId(initialId);
+      } else {
+        setInitError("No cameras found.");
       }
-    };
-    getCameras();
+    }).catch(err => {
+      setInitError("Camera permission denied.");
+    });
 
     return () => {
-      isMountedRef.current = false;
-      if (codeReaderRef.current) codeReaderRef.current.reset();
+      stopScanner();
     };
   }, []);
 
-  const startScanning = useCallback(async () => {
-    if (!codeReaderRef.current || availableCameras.length === 0) return;
-    
+  useEffect(() => {
+    if (currentCameraId && !isScanning) {
+      startScanner(currentCameraId);
+    }
+  }, [currentCameraId]);
+
+  const startScanner = async (cameraId) => {
+    if (scannerRef.current) {
+      await stopScanner();
+    }
+
+    const html5QrCode = new Html5Qrcode(containerId);
+    scannerRef.current = html5QrCode;
+
+    const config = {
+      fps: 20,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0
+    };
+
     try {
-      // Always reset before switching
-      codeReaderRef.current.reset();
-      
-      const selectedCamera = availableCameras[currentCameraIndex];
-      const deviceId = selectedCamera?.deviceId;
-
-      // Request High Quality
-      const constraints = {
-        video: {
-          deviceId: deviceId ? { exact: deviceId } : undefined,
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
-
-      await codeReaderRef.current.decodeFromConstraints(
-        constraints,
-        videoRef.current,
-        (result, err) => {
-          if (!isMountedRef.current) return;
-          if (result) {
-            if (cooldownRef.current) return;
-            const code = result.getText().trim();
-            cooldownRef.current = true;
-            if (navigator.vibrate) navigator.vibrate(200);
-            setLastDetected(code);
-
-            if (continuous) {
-              setScanHistory(prev => [{ code, timestamp: Date.now() }, ...prev]);
-              onScan(code);
-              setTimeout(() => {
-                if (isMountedRef.current) {
-                  setLastDetected(null);
-                  cooldownRef.current = false;
-                }
-              }, 600);
-            } else {
-              onScan(code);
-              setTimeout(() => {
-                if (isMountedRef.current) setLastDetected(null);
-              }, 800);
-            }
-          }
+      setIsScanning(true);
+      await html5QrCode.start(
+        cameraId,
+        config,
+        (decodedText) => {
+          handleSuccess(decodedText);
+        },
+        (errorMessage) => {
+          // Ignore frequent "no code found" errors
         }
       );
     } catch (err) {
-      // If HD fails, try a simpler start
+      setInitError("Failed to start scanner. Try another camera.");
+      setIsScanning(false);
+    }
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current && scannerRef.current.isScanning) {
       try {
-         await codeReaderRef.current.decodeFromVideoDevice(availableCameras[currentCameraIndex]?.deviceId, videoRef.current, (result) => {
-            if (result) onScan(result.getText());
-         });
-      } catch(e) {
-         setInitError("Camera failed. Please refresh or try another camera.");
+        await scannerRef.current.stop();
+        scannerRef.current = null;
+        setIsScanning(false);
+      } catch (err) {
+        console.error("Failed to stop scanner", err);
       }
     }
-  }, [availableCameras, currentCameraIndex, onScan, continuous]);
+  };
 
-  useEffect(() => {
-    if (availableCameras.length > 0) {
-      startScanning();
+  const handleSuccess = (text) => {
+    if (lastDetected === text) return; // Prevent duplicate rapid scans
+    
+    if (navigator.vibrate) navigator.vibrate(200);
+    setLastDetected(text);
+    onScan(text);
+
+    if (!continuous) {
+      setTimeout(() => onClose(), 1000);
+    } else {
+      setTimeout(() => setLastDetected(null), 1500);
     }
-  }, [availableCameras, currentCameraIndex, startScanning]);
+  };
 
   const switchCamera = () => {
-    const nextIndex = (currentCameraIndex + 1) % availableCameras.length;
-    setCurrentCameraIndex(nextIndex);
-    localStorage.setItem('billspark_camera_index', nextIndex.toString());
-  };
-
-  const handleManualSubmit = (e) => {
-    e.preventDefault();
-    const val = e.target.manualCode.value.trim();
-    if (val) {
-      onScan(val);
-      if (continuous) e.target.manualCode.value = '';
-    }
-  };
-
-  const toggleTorch = async () => {
-    try {
-      const track = videoRef.current?.srcObject?.getVideoTracks()[0];
-      if (track) {
-        const capabilities = track.getCapabilities();
-        if (capabilities.torch) {
-          const currentTorch = track.getSettings().torch;
-          await track.applyConstraints({ advanced: [{ torch: !currentTorch }] });
-        }
-      }
-    } catch (e) {}
+    if (cameras.length < 2) return;
+    const currentIndex = cameras.findIndex(c => c.id === currentCameraId);
+    const nextIndex = (currentIndex + 1) % cameras.length;
+    const nextId = cameras[nextIndex].id;
+    setCurrentCameraId(nextId);
+    localStorage.setItem('billspark_camera_id', nextId);
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4">
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes sweep { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-        .laser-sweep { animation: sweep 2.5s ease-in-out infinite; }
-      `}} />
-
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg relative flex flex-col h-full max-h-[90vh] overflow-hidden border border-slate-200">
         
+        {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50">
           <div className="flex-1">
             <h3 className="font-black text-2xl text-slate-800">{title}</h3>
-            <p className="text-blue-600 font-bold text-xs mt-1">
-              {availableCameras.length > 1 ? `Lens ${currentCameraIndex + 1} of ${availableCameras.length}` : 'Scanning active'}
+            <p className="text-blue-600 font-bold text-xs mt-1 uppercase tracking-widest">
+              High-Speed AI Engine
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {availableCameras.length > 1 && (
+            {cameras.length > 1 && (
               <button 
                 onClick={switchCamera}
-                className="p-3 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-all flex items-center gap-2"
+                className="p-3 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-all"
               >
-                <RefreshCw size={20} className="animate-spin-slow" />
-                <span className="font-bold text-xs">Switch</span>
+                <RefreshCw size={20} />
               </button>
             )}
-            <button onClick={toggleTorch} className="p-3 bg-slate-200 rounded-xl"><Zap size={20} /></button>
-            <button onClick={onClose} className="text-slate-500 font-bold px-4 py-2">Close</button>
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800">
+              <X size={28} />
+            </button>
           </div>
         </div>
         
-        <div className="w-full flex-1 bg-black relative flex items-center justify-center min-h-[40vh] overflow-hidden">
+        {/* Scanner Body */}
+        <div className="w-full flex-1 bg-black relative flex items-center justify-center overflow-hidden">
           {lastDetected && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/80 backdrop-blur-sm">
-              <div className="text-center text-white">
-                <h2 className="text-2xl font-black">SCANNED!</h2>
-                <p className="font-bold">{lastDetected}</p>
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/80 backdrop-blur-sm animate-in fade-in">
+              <div className="text-center text-white p-6">
+                <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <h2 className="text-3xl font-black mb-2">SCANNED!</h2>
+                <p className="text-xl font-bold bg-black/20 py-2 px-4 rounded-xl">{lastDetected}</p>
               </div>
             </div>
           )}
 
           {initError ? (
-            <div className="text-red-400 font-bold text-center px-8 z-10 flex flex-col gap-4">
-              <p>{initError}</p>
-              <button onClick={() => window.location.reload()} className="px-6 py-3 bg-white/10 rounded-xl">Reload Page</button>
+            <div className="text-red-400 font-bold text-center px-8 z-10">
+              <p className="mb-4">{initError}</p>
+              <button onClick={() => window.location.reload()} className="px-6 py-3 bg-white/10 rounded-xl text-white">Reload App</button>
             </div>
           ) : (
-            <>
-              <video ref={videoRef} className="w-full h-full absolute inset-0 object-cover" autoPlay playsInline muted />
-              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/40">
-                <div className="w-[250px] h-[250px] border-[4px] border-white/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex items-center justify-center">
-                  <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_20px_red] laser-sweep"></div>
-                </div>
-                <div className="mt-8 flex flex-col items-center gap-3">
-                  <div className="px-4 py-2 bg-blue-600 text-white text-sm font-black rounded-full shadow-lg animate-bounce">
-                    Move back slightly if blurry
-                  </div>
-                </div>
-              </div>
-            </>
+            <div id={containerId} className="w-full h-full"></div>
           )}
         </div>
 
-        <div className="px-6 py-6 border-t border-slate-100 bg-white">
-          <form onSubmit={handleManualSubmit} className="flex gap-2 w-full">
-            <input 
-              type="text" name="manualCode" placeholder="Enter barcode..." 
-              className="flex-1 min-w-0 px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-lg outline-none focus:border-blue-500"
-            />
-            <button type="submit" className="px-6 py-4 bg-slate-800 text-white font-black rounded-2xl">Add</button>
-          </form>
+        {/* Footer Guidance */}
+        <div className="p-6 bg-white border-t border-slate-100">
+           <div className="flex items-center justify-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <p className="text-slate-500 font-bold text-sm text-center">
+                Point camera at barcode. Stay 15cm (6in) away.
+              </p>
+           </div>
         </div>
       </div>
     </div>
