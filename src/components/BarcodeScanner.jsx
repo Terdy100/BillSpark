@@ -17,27 +17,46 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
     const startScanning = async () => {
       try {
-        // Find back camera
         const videoInputDevices = await codeReaderRef.current.listVideoInputDevices();
         let selectedDeviceId = undefined;
         
         if (videoInputDevices.length > 0) {
-          // Try to find environment camera
           const backCamera = videoInputDevices.find(device => 
             device.label.toLowerCase().includes('back') || 
             device.label.toLowerCase().includes('environment') ||
             device.label.toLowerCase().includes('rear')
           );
-          if (backCamera) {
-            selectedDeviceId = backCamera.deviceId;
-          } else {
-            // Default to the last one which is usually back on mobile
-            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+          selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
+        }
+
+        const constraints = {
+          video: {
+            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          
+          // Apply advanced focus constraints if supported
+          const track = stream.getVideoTracks()[0];
+          const capabilities = track.getCapabilities?.() || {};
+          if (capabilities.focusMode?.includes('continuous')) {
+            try {
+              await track.applyConstraints({
+                advanced: [{ focusMode: 'continuous' }]
+              });
+            } catch (e) {
+              console.warn("Focus constraints failed", e);
+            }
           }
         }
 
-        codeReaderRef.current.decodeFromVideoDevice(
-          selectedDeviceId, 
+        codeReaderRef.current.decodeFromVideoElement(
           videoRef.current, 
           (result, err) => {
             if (!isMountedRef.current) return;
