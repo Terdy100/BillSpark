@@ -29,44 +29,8 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
           selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
         }
 
-        const constraints = {
-          video: {
-            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-            facingMode: 'environment',
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          }
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          
-          // Apply advanced focus and zoom constraints if supported
-          const track = stream.getVideoTracks()[0];
-          const capabilities = track.getCapabilities?.() || {};
-          
-          const advancedConstraints = {};
-          if (capabilities.focusMode?.includes('continuous')) {
-            advancedConstraints.focusMode = 'continuous';
-          }
-          if (capabilities.zoom) {
-            // Use a slight zoom (2x) to help with focus distance
-            advancedConstraints.zoom = Math.min(2, capabilities.zoom.max || 2);
-          }
-
-          if (Object.keys(advancedConstraints).length > 0) {
-            try {
-              await track.applyConstraints({
-                advanced: [advancedConstraints]
-              });
-            } catch (e) {
-              console.warn("Advanced constraints failed", e);
-            }
-          }
-        }
-
-        codeReaderRef.current.decodeFromVideoElement(
+        await codeReaderRef.current.decodeFromVideoDevice(
+          selectedDeviceId, 
           videoRef.current, 
           (result, err) => {
             if (!isMountedRef.current) return;
@@ -99,6 +63,24 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             }
           }
         );
+
+        // Once the camera starts, try to apply zoom/focus after a short delay
+        setTimeout(async () => {
+          if (!isMountedRef.current || !videoRef.current?.srcObject) return;
+          const stream = videoRef.current.srcObject;
+          const track = stream.getVideoTracks()[0];
+          if (!track) return;
+
+          const capabilities = track.getCapabilities?.() || {};
+          const advanced = {};
+          if (capabilities.focusMode?.includes('continuous')) advanced.focusMode = 'continuous';
+          if (capabilities.zoom) advanced.zoom = Math.min(2, capabilities.zoom.max || 2);
+          
+          if (Object.keys(advanced).length > 0) {
+            try { await track.applyConstraints({ advanced: [advanced] }); } catch (e) {}
+          }
+        }, 1500);
+
       } catch (err) {
         if (isMountedRef.current) setInitError(err.message || 'Camera failed to start.');
       }
