@@ -17,19 +17,26 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
     const startScanning = async () => {
       try {
+        // Find back camera
         const videoInputDevices = await codeReaderRef.current.listVideoInputDevices();
         let selectedDeviceId = undefined;
         
         if (videoInputDevices.length > 0) {
+          // Try to find environment camera
           const backCamera = videoInputDevices.find(device => 
             device.label.toLowerCase().includes('back') || 
             device.label.toLowerCase().includes('environment') ||
             device.label.toLowerCase().includes('rear')
           );
-          selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
+          if (backCamera) {
+            selectedDeviceId = backCamera.deviceId;
+          } else {
+            // Default to the last one which is usually back on mobile
+            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+          }
         }
 
-        await codeReaderRef.current.decodeFromVideoDevice(
+        codeReaderRef.current.decodeFromVideoDevice(
           selectedDeviceId, 
           videoRef.current, 
           (result, err) => {
@@ -63,24 +70,6 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             }
           }
         );
-
-        // Once the camera starts, try to apply zoom/focus after a short delay
-        setTimeout(async () => {
-          if (!isMountedRef.current || !videoRef.current?.srcObject) return;
-          const stream = videoRef.current.srcObject;
-          const track = stream.getVideoTracks()[0];
-          if (!track) return;
-
-          const capabilities = track.getCapabilities?.() || {};
-          const advanced = {};
-          if (capabilities.focusMode?.includes('continuous')) advanced.focusMode = 'continuous';
-          if (capabilities.zoom) advanced.zoom = Math.min(2, capabilities.zoom.max || 2);
-          
-          if (Object.keys(advanced).length > 0) {
-            try { await track.applyConstraints({ advanced: [advanced] }); } catch (e) {}
-          }
-        }, 1500);
-
       } catch (err) {
         if (isMountedRef.current) setInitError(err.message || 'Camera failed to start.');
       }
