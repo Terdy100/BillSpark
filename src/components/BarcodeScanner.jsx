@@ -42,16 +42,26 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           
-          // Apply advanced focus constraints if supported
+          // Apply advanced focus and zoom constraints if supported
           const track = stream.getVideoTracks()[0];
           const capabilities = track.getCapabilities?.() || {};
+          
+          const advancedConstraints = {};
           if (capabilities.focusMode?.includes('continuous')) {
+            advancedConstraints.focusMode = 'continuous';
+          }
+          if (capabilities.zoom) {
+            // Use a slight zoom (2x) to help with focus distance
+            advancedConstraints.zoom = Math.min(2, capabilities.zoom.max || 2);
+          }
+
+          if (Object.keys(advancedConstraints).length > 0) {
             try {
               await track.applyConstraints({
-                advanced: [{ focusMode: 'continuous' }]
+                advanced: [advancedConstraints]
               });
             } catch (e) {
-              console.warn("Focus constraints failed", e);
+              console.warn("Advanced constraints failed", e);
             }
           }
         }

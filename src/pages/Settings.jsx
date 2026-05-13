@@ -44,8 +44,8 @@ export default function Settings() {
   }, []);
 
   const checkAdminStatus = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.user_metadata?.is_admin) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.user_metadata?.is_admin) {
       setIsAdmin(true);
       fetchUsersList(); // Fetch users if admin
     }
