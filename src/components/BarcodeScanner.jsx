@@ -17,27 +17,27 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
     const startScanning = async () => {
       try {
-        // Find back camera
         const videoInputDevices = await codeReaderRef.current.listVideoInputDevices();
         let selectedDeviceId = undefined;
         
         if (videoInputDevices.length > 0) {
-          // Priority 1: Specifically look for the main back camera
           const backCamera = videoInputDevices.find(device => 
             /back|rear|environment/i.test(device.label) && !/wide|tele|ultra/i.test(device.label)
           );
-          
-          if (backCamera) {
-            selectedDeviceId = backCamera.deviceId;
-          } else {
-            // Priority 2: Any back camera
-            const anyBack = videoInputDevices.find(device => /back|rear|environment/i.test(device.label));
-            selectedDeviceId = anyBack ? anyBack.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
-          }
+          if (backCamera) selectedDeviceId = backCamera.deviceId;
         }
 
-        codeReaderRef.current.decodeFromVideoDevice(
-          selectedDeviceId, 
+        const constraints = {
+          video: {
+            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+            facingMode: 'environment',
+            width: { min: 1280, ideal: 1920 },
+            height: { min: 720, ideal: 1080 }
+          }
+        };
+
+        await codeReaderRef.current.decodeFromConstraints(
+          constraints,
           videoRef.current, 
           (result, err) => {
             if (!isMountedRef.current) return;
