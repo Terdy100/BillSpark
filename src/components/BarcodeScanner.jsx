@@ -1,13 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Zap, RefreshCw } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode", continuous = false }) {
   const [initError, setInitError] = useState(null);
   const [scanHistory, setScanHistory] = useState([]);
   const [lastDetected, setLastDetected] = useState(null);
   const [availableCameras, setAvailableCameras] = useState([]);
-  const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
+  const [currentCameraIndex, setCurrentCameraIndex] = useState(() => {
+    // Remember which camera was used last time
+    const saved = localStorage.getItem('billspark_camera_index');
+    return saved ? parseInt(saved, 10) : 0;
+  });
   
   const videoRef = useRef(null);
   const codeReaderRef = useRef(null);
@@ -17,7 +21,24 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
   // Initialize Reader and Get Cameras
   useEffect(() => {
     isMountedRef.current = true;
-    codeReaderRef.current = new BrowserMultiFormatReader();
+    
+    // Configure formats and "Try Harder" mode
+    const hints = new Map();
+    const formats = [
+      BarcodeFormat.QR_CODE,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF,
+      BarcodeFormat.DATA_MATRIX
+    ];
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, formats);
+    hints.set(DecodeHintType.TRY_HARDER, true);
+    
+    codeReaderRef.current = new BrowserMultiFormatReader(hints);
     
     const getCameras = async () => {
       try {
@@ -106,7 +127,9 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
   }, [availableCameras, currentCameraIndex, startScanning]);
 
   const switchCamera = () => {
-    setCurrentCameraIndex((prev) => (prev + 1) % availableCameras.length);
+    const nextIndex = (currentCameraIndex + 1) % availableCameras.length;
+    setCurrentCameraIndex(nextIndex);
+    localStorage.setItem('billspark_camera_index', nextIndex.toString());
   };
 
   const handleManualSubmit = (e) => {
