@@ -86,16 +86,13 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     scannerRef.current = html5QrCode;
 
     const config = {
-      fps: 30, 
-      qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const width = viewfinderWidth * 0.85;
-          const height = Math.min(viewfinderHeight * 0.5, 250);
-          return { width, height };
-      },
-      aspectRatio: 1.7777777778, // Force 16:9 which is the most stable aspect ratio for iOS Safari
+      fps: 20, // Lowering FPS slightly for better CPU processing per frame on iOS
+      // REMOVING QRBOX: Scanning the full frame is the most reliable way on iOS Safari
+      // It avoids many WebKit-specific bugs with canvas-based cropping.
+      aspectRatio: 1.7777777778,
       disableFlip: true,
       experimentalFeatures: {
-        useBarCodeDetectorIfSupported: false // DISABLED: Often reports "true" on iOS but fails to return results
+        useBarCodeDetectorIfSupported: false 
       },
       formatsToSupport: [
         Html5QrcodeSupportedFormats.QR_CODE,
@@ -106,7 +103,11 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
         Html5QrcodeSupportedFormats.ITF
-      ]
+      ],
+      videoConstraints: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
     };
 
     try {
@@ -165,9 +166,13 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     const nextIndex = (currentIndex + 1) % cameras.length;
     const nextId = cameras[nextIndex].id;
     
-    // Force a complete stop of the current scanner before switching
-    await stopScanner();
+    // Explicitly stop and clear the current scanner before switching
+    if (scannerRef.current) {
+        try { await scannerRef.current.stop(); } catch(e) {}
+        scannerRef.current = null;
+    }
     
+    setIsScanning(false);
     setCurrentCameraId(nextId);
     localStorage.setItem('billspark_camera_id', nextId);
   };
@@ -204,6 +209,20 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         </div>
         
         <div className="w-full flex-1 bg-black relative flex items-center justify-center overflow-hidden">
+          {/* Visual Scan Guide (CSS Only) */}
+          {/* This helps the user aim while the engine scans the full video frame for maximum reliability */}
+          {!lastDetected && !initError && (
+            <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center p-8">
+              <div className="w-full max-w-[280px] aspect-[4/3] border-2 border-white/20 rounded-3xl relative">
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-2xl"></div>
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-2xl"></div>
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-2xl"></div>
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-2xl"></div>
+                <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-red-500/40 shadow-[0_0_10px_rgba(239,68,68,0.5)] animate-pulse"></div>
+              </div>
+            </div>
+          )}
+
           {lastDetected && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-500/80 backdrop-blur-sm">
               <div className="text-center text-white p-6">
