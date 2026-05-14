@@ -14,7 +14,8 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
   const [torchOn, setTorchOn] = useState(false);
   
   const scannerRef = useRef(null);
-  const containerId = "scanner-container-" + Math.random().toString(36).substr(2, 9);
+  // Use a stable ID that doesn't change on re-render to prevent losing the DOM reference
+  const containerId = useRef("scanner-container-" + Math.random().toString(36).substr(2, 11)).current;
 
   useEffect(() => {
     Html5Qrcode.getCameras().then(devices => {
@@ -37,7 +38,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
   }, []);
 
   useEffect(() => {
-    if (currentCameraId && !isScanning) {
+    if (currentCameraId) {
       startScanner(currentCameraId);
     }
   }, [currentCameraId]);
@@ -85,20 +86,17 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     scannerRef.current = html5QrCode;
 
     const config = {
-      fps: 30, // Maximize performance
+      fps: 30, 
       qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Wider, rectangular box is much better for standard product barcodes (1D)
-          // especially on mobile where barcodes are held horizontally.
           const width = viewfinderWidth * 0.85;
           const height = Math.min(viewfinderHeight * 0.5, 250);
           return { width, height };
       },
-      aspectRatio: undefined, // Better for variable camera sensors on iOS
-      disableFlip: true, // Don't flip for back camera
+      aspectRatio: 1.7777777778, // Force 16:9 which is the most stable aspect ratio for iOS Safari
+      disableFlip: true,
       experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true 
+        useBarCodeDetectorIfSupported: false // DISABLED: Often reports "true" on iOS but fails to return results
       },
-      // CRITICAL: Explicitly listing formats is the #1 fix for "clear image but no detection" on iOS
       formatsToSupport: [
         Html5QrcodeSupportedFormats.QR_CODE,
         Html5QrcodeSupportedFormats.EAN_13,
@@ -107,20 +105,20 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         Html5QrcodeSupportedFormats.CODE_39,
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODE_93
+        Html5QrcodeSupportedFormats.ITF
       ]
     };
 
     try {
       setIsScanning(true);
       
-      // On iOS, if we have a saved cameraId we use it, otherwise we MUST use facingMode "environment"
-      // to let the OS pick the best primary lens for scanning.
-      const startParam = cameraId || { facingMode: "environment" };
+      // On iOS, we MUST stop any previous stream explicitly before starting a new one
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        await scannerRef.current.stop();
+      }
 
       await html5QrCode.start(
-        startParam,
+        cameraId,
         config,
         (decodedText) => handleSuccess(decodedText),
         () => {} 
@@ -161,17 +159,21 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     }
   };
 
-  const switchCamera = () => {
+  const switchCamera = async () => {
     if (cameras.length < 2) return;
     const currentIndex = cameras.findIndex(c => c.id === currentCameraId);
     const nextIndex = (currentIndex + 1) % cameras.length;
     const nextId = cameras[nextIndex].id;
+    
+    // Force a complete stop of the current scanner before switching
+    await stopScanner();
+    
     setCurrentCameraId(nextId);
     localStorage.setItem('billspark_camera_id', nextId);
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg relative flex flex-col h-full max-h-[90vh] overflow-hidden border border-slate-200">
         
         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50">
