@@ -10,6 +10,8 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
   const [currentCameraId, setCurrentCameraId] = useState(null);
   const [lastScannedCode, setLastScannedCode] = useState(null);
   const [lastScannedTime, setLastScannedTime] = useState(0);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   
   const scannerRef = useRef(null);
   const containerId = "scanner-container-" + Math.random().toString(36).substr(2, 9);
@@ -46,6 +48,8 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         await scannerRef.current.stop();
         scannerRef.current = null;
         setIsScanning(false);
+        setHasTorch(false);
+        setTorchOn(false);
       } catch (err) {
         console.error("Failed to stop scanner", err);
       }
@@ -54,8 +58,8 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
   const handleSuccess = (text) => {
     const now = Date.now();
-    // 2.5 second cooldown for the SAME barcode to prevent duplicates
-    if (lastScannedCode === text && (now - lastScannedTime) < 2500) {
+    // 2.0 second cooldown for the SAME barcode to prevent duplicates (aligned with UI)
+    if (lastScannedCode === text && (now - lastScannedTime) < 2000) {
       return;
     }
     
@@ -81,12 +85,15 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     scannerRef.current = html5QrCode;
 
     const config = {
-      fps: 15,
+      fps: 25, // Higher FPS for smoother detection on iOS
       qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.7;
+          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.8;
           return { width: size, height: size };
       },
-      aspectRatio: undefined // Crucial for iOS Safari stability
+      aspectRatio: undefined, // Crucial for iOS Safari stability
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true // Uses native iOS Barcode Detector (iOS 17+)
+      }
     };
 
     try {
@@ -97,9 +104,39 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         (decodedText) => handleSuccess(decodedText),
         () => {} 
       );
+
+      // Attempt to detect torch and force focus constraints
+      try {
+        const capabilities = html5QrCode.getRunningTrackCapabilities();
+        setHasTorch(!!capabilities.torch);
+        
+        // Force continuous focus if supported (Fixes blurry scanning on many iPhones)
+        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+           await html5QrCode.applyVideoConstraints({
+             focusMode: 'continuous',
+             advanced: [{ focusMode: 'continuous' }]
+           });
+        }
+      } catch (e) {
+        console.log("Extended capabilities not supported");
+      }
     } catch (err) {
       setInitError("Camera error. Please switch lenses or reload.");
       setIsScanning(false);
+    }
+  };
+
+  const toggleTorch = async () => {
+    if (scannerRef.current && hasTorch) {
+      try {
+        const nextState = !torchOn;
+        await scannerRef.current.applyVideoConstraints({
+          torch: nextState
+        });
+        setTorchOn(nextState);
+      } catch (err) {
+        console.warn("Torch toggle failed", err);
+      }
     }
   };
 
@@ -124,12 +161,20 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {hasTorch && (
+              <button 
+                onClick={toggleTorch} 
+                className={`p-3 rounded-xl transition-all ${torchOn ? 'bg-yellow-400 text-white shadow-lg shadow-yellow-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+              >
+                <Zap size={20} fill={torchOn ? "currentColor" : "none"} />
+              </button>
+            )}
             {cameras.length > 1 && (
-              <button onClick={switchCamera} className="p-3 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200">
+              <button onClick={switchCamera} className="p-3 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-colors">
                 <RefreshCw size={20} />
               </button>
             )}
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800">
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800 transition-colors">
               <X size={28} />
             </button>
           </div>
