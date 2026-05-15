@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { RefreshCw, X, Camera, ZoomIn, ZoomOut } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode", continuous = false }) {
   const [initError, setInitError] = useState(null);
@@ -58,18 +58,38 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       scannerRef.current = html5QrCode;
 
       const config = {
-        fps: 20,
+        fps: 25, // Increased FPS for smoother scanning
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const size = Math.floor(minEdge * 0.7);
-          return { width: size, height: size };
+          // Optimized for both QR and 1D Barcodes
+          const width = Math.floor(viewfinderWidth * 0.85);
+          const height = Math.floor(viewfinderHeight * 0.45);
+          return { width, height };
         },
-        aspectRatio: 1.0,
+        aspectRatio: 1.777778, // 16:9 ratio is more natural for mobile sensors
         showTorchButtonIfSupported: true,
         videoConstraints: {
+          facingMode: 'environment',
           focusMode: 'continuous',
-          facingMode: 'environment'
-        }
+          // Request higher resolution for better small barcode detection
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 }
+        },
+        // Enable native BarcodeDetector if supported (HUGE speed boost on iOS 17+)
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
+        // Only scan formats we actually use to save CPU cycles
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF
+        ],
+        disableFlip: true // Saves processing power for 1D barcodes
       };
 
       try {
@@ -199,10 +219,31 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
           {/* Alignment Guide */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-[85%] h-[40%] border-2 border-white/20 rounded-3xl relative">
-               <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-500/40"></div>
+            <div className="w-[85%] h-[45%] border-2 border-white/20 rounded-3xl relative overflow-hidden">
+               {/* Scanning Line Animation */}
+               <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
+               
+               {/* Corner accents */}
+               <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
+               <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
+               <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
+               <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
+               
+               <div className="absolute top-1/2 left-0 right-0 h-px bg-white/10"></div>
             </div>
           </div>
+
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes scan-line {
+              0% { top: 0%; opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { top: 100%; opacity: 0; }
+            }
+            .animate-scan-line {
+              animation: scan-line 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            }
+          `}} />
           
           {initError && (
              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-white p-10 text-center">
