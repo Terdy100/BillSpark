@@ -72,16 +72,18 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       const config = {
         fps: isIOS ? 20 : 25,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // "Android-style" near-fullscreen scanning
-          const width = Math.floor(viewfinderWidth * 0.95);
-          const height = Math.floor(viewfinderHeight * 0.85);
+          // Reverting to a more stable size (85% x 55%)
+          // Super-large boxes (95%+) can cause canvas overflow errors on some devices
+          const width = Math.floor(viewfinderWidth * 0.85);
+          const height = Math.floor(viewfinderHeight * 0.55);
           return { width, height };
         },
         aspectRatio: 1.777778, // 16:9
         showTorchButtonIfSupported: true,
         videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          // Restoring min constraints to ensure enough detail for 1D barcodes
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 },
           facingMode: 'environment'
         },
         experimentalFeatures: {
@@ -230,7 +232,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
           {/* Alignment Guide (Minimalist Blue Only) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-[95%] h-[85%] relative overflow-hidden">
+            <div className="w-[85%] h-[55%] relative overflow-hidden">
                {/* Scanning Line Animation */}
                <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
                
