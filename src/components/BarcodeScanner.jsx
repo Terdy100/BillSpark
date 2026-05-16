@@ -20,10 +20,19 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length > 0) {
         setCameras(devices);
-        // On iOS, we specifically want the "back" camera labels
-        // We filter out "Ultra Wide" as it often fails to focus on barcodes at close range
+        
+        // Refined iOS Camera Selection
+        // We want the "Main" camera. Labels like "Back Camera", "Camera 0", or "Triple Camera" (which handles switching)
         const backCameras = devices.filter(d => /back|rear|environment/i.test(d.label));
-        const preferredBack = backCameras.find(d => !/ultra|tele/i.test(d.label.toLowerCase())) || backCameras[0];
+        
+        // Specifically look for labels that suggest the primary wide lens
+        let preferredBack = backCameras.find(d => 
+          /main|primary/i.test(d.label) || 
+          (/back/i.test(d.label) && !/ultra|tele|wide\s+camera\s+[1-9]/i.test(d.label.toLowerCase()))
+        );
+
+        // Fallback to first back camera if specific main not found
+        if (!preferredBack) preferredBack = backCameras[0];
         
         const savedId = localStorage.getItem('billspark_camera_id');
         const initialId = savedId || (preferredBack ? preferredBack.id : devices[0].id);
@@ -57,28 +66,30 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       const html5QrCode = new Html5Qrcode(containerId);
       scannerRef.current = html5QrCode;
 
+      // Detect if we are on iOS to apply specific tweaks
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
       const config = {
-        fps: 25, // Increased FPS for smoother scanning
+        fps: isIOS ? 20 : 25, // Lower FPS on iOS to reduce CPU lag and thermal throttling
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Optimized for both QR and 1D Barcodes
-          const width = Math.floor(viewfinderWidth * 0.85);
-          const height = Math.floor(viewfinderHeight * 0.45);
+          // Taller box for better 1D barcode alignment on mobile
+          const width = Math.floor(viewfinderWidth * 0.80);
+          const height = Math.floor(viewfinderHeight * 0.50);
           return { width, height };
         },
-        aspectRatio: 1.777778, // 16:9 ratio is more natural for mobile sensors
+        aspectRatio: 1.777778, // 16:9
         showTorchButtonIfSupported: true,
         videoConstraints: {
-          facingMode: 'environment',
-          focusMode: 'continuous',
-          // Request higher resolution for better small barcode detection
-          width: { min: 640, ideal: 1280 },
-          height: { min: 480, ideal: 720 }
+          // On iOS, sometimes 'ideal' works better than 'min/max' for lens selection
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'environment'
         },
-        // Enable native BarcodeDetector if supported (HUGE speed boost on iOS 17+)
+        // IMPORTANT: BarcodeDetector is native and FAST. 
+        // But if it's slow, we might want to check if the browser is struggling with the fallback.
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
         },
-        // Only scan formats we actually use to save CPU cycles
         formatsToSupport: [
           Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.EAN_13,
@@ -89,7 +100,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
           Html5QrcodeSupportedFormats.UPC_E,
           Html5QrcodeSupportedFormats.ITF
         ],
-        disableFlip: true // Saves processing power for 1D barcodes
+        disableFlip: true
       };
 
       try {
@@ -118,11 +129,16 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       }
       setIsScanning(true);
 
-      // Check for hardware zoom support (Critical for newer iPhones)
+      // Check for hardware zoom support
       try {
         const track = html5QrCode.getRunningTrackCapabilities();
         if (track.zoom) {
           setHasZoom(true);
+          // Set a very slight default zoom for high-res iPhone cameras 
+          // to help with small barcodes without requiring manual adjustment
+          if (isIOS && track.zoom.min < 1.2 && track.zoom.max > 1.2) {
+             handleZoom(1.2);
+          }
         }
       } catch (e) {
         console.log("Zoom not supported by hardware");
