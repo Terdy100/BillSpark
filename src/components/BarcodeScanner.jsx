@@ -70,23 +70,20 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
       const config = {
-        fps: isIOS ? 20 : 25, // Lower FPS on iOS to reduce CPU lag and thermal throttling
+        fps: isIOS ? 20 : 25,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Taller box for better 1D barcode alignment on mobile
-          const width = Math.floor(viewfinderWidth * 0.80);
-          const height = Math.floor(viewfinderHeight * 0.50);
+          // "Android-style" near-fullscreen scanning
+          const width = Math.floor(viewfinderWidth * 0.95);
+          const height = Math.floor(viewfinderHeight * 0.85);
           return { width, height };
         },
         aspectRatio: 1.777778, // 16:9
         showTorchButtonIfSupported: true,
         videoConstraints: {
-          // On iOS, sometimes 'ideal' works better than 'min/max' for lens selection
           width: { ideal: 1280 },
           height: { ideal: 720 },
           facingMode: 'environment'
         },
-        // IMPORTANT: BarcodeDetector is native and FAST. 
-        // But if it's slow, we might want to check if the browser is struggling with the fallback.
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
         },
@@ -134,8 +131,6 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         const track = html5QrCode.getRunningTrackCapabilities();
         if (track.zoom) {
           setHasZoom(true);
-          // Set a very slight default zoom for high-res iPhone cameras 
-          // to help with small barcodes without requiring manual adjustment
           if (isIOS && track.zoom.min < 1.2 && track.zoom.max > 1.2) {
              handleZoom(1.2);
           }
@@ -166,7 +161,6 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
     const file = e.target.files[0];
     if (!file) return;
 
-    // Use a fresh instance for file scanning
     const html5QrCode = new Html5Qrcode(containerId);
     try {
       const text = await html5QrCode.scanFile(file, true);
@@ -213,9 +207,10 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         
         {/* Viewport */}
         <div className="w-full flex-1 bg-black relative flex items-center justify-center overflow-hidden">
-          <div id={containerId} className="w-full h-full"></div>
+          {/* Main Scanner Div */}
+          <div id={containerId} className="w-full h-full flex items-center justify-center [&>video]:object-cover [&>video]:w-full [&>video]:h-full"></div>
           
-          {/* Zoom Controls (The "iPhone 14/15 Fix") */}
+          {/* Zoom Controls */}
           {hasZoom && (
             <div className="absolute bottom-10 left-8 right-8 z-20 px-6 py-4 bg-black/40 backdrop-blur-xl rounded-[2rem] border border-white/20 flex items-center gap-6">
               <ZoomOut size={18} className="text-white/60" />
@@ -233,19 +228,17 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             </div>
           )}
 
-          {/* Alignment Guide */}
+          {/* Alignment Guide (Minimalist Blue Only) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-[85%] h-[45%] border-2 border-white/20 rounded-3xl relative overflow-hidden">
+            <div className="w-[95%] h-[85%] relative overflow-hidden">
                {/* Scanning Line Animation */}
                <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
                
-               {/* Corner accents */}
+               {/* Corner accents (Blue only) */}
                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
-               
-               <div className="absolute top-1/2 left-0 right-0 h-px bg-white/10"></div>
             </div>
           </div>
 
@@ -257,7 +250,12 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
               100% { top: 100%; opacity: 0; }
             }
             .animate-scan-line {
-              animation: scan-line 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+              animation: scan-line 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            }
+            #${containerId} video {
+              object-fit: cover !important;
+              width: 100% !important;
+              height: 100% !important;
             }
           `}} />
           
