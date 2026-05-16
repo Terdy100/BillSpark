@@ -72,16 +72,14 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       const config = {
         fps: isIOS ? 20 : 25,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Reverting to a more stable size (85% x 55%)
-          // Super-large boxes (95%+) can cause canvas overflow errors on some devices
-          const width = Math.floor(viewfinderWidth * 0.85);
-          const height = Math.floor(viewfinderHeight * 0.55);
+          // Wide and tall scanning area (60% of screen height)
+          const width = Math.floor(viewfinderWidth * 0.90);
+          const height = Math.floor(viewfinderHeight * 0.60);
           return { width, height };
         },
-        aspectRatio: 1.777778, // 16:9
+        // Removed fixed aspectRatio to let Safari handle native sensor flow
         showTorchButtonIfSupported: true,
         videoConstraints: {
-          // Restoring min constraints to ensure enough detail for 1D barcodes
           width: { min: 640, ideal: 1280 },
           height: { min: 480, ideal: 720 },
           facingMode: 'environment'
@@ -133,8 +131,9 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         const track = html5QrCode.getRunningTrackCapabilities();
         if (track.zoom) {
           setHasZoom(true);
-          if (isIOS && track.zoom.min < 1.2 && track.zoom.max > 1.2) {
-             handleZoom(1.2);
+          // Increased default zoom to 1.5x for better focus on "Pro" iPhone models
+          if (isIOS && track.zoom.min < 1.5 && track.zoom.max > 1.5) {
+             handleZoom(1.5);
           }
         }
       } catch (e) {
@@ -232,7 +231,7 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
 
           {/* Alignment Guide (Minimalist Blue Only) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-[85%] h-[55%] relative overflow-hidden">
+            <div className="w-[90%] h-[60%] relative overflow-hidden">
                {/* Scanning Line Animation */}
                <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
                
@@ -254,10 +253,18 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             .animate-scan-line {
               animation: scan-line 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
             }
+            /* Force the video to fill the screen properly and fix the "Above center" offset */
             #${containerId} video {
               object-fit: cover !important;
               width: 100% !important;
               height: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              display: block !important;
+            }
+            /* Hide any text or buttons injected by the library that shift the video */
+            #${containerId} *:not(video):not(canvas) {
+              display: none !important;
             }
           `}} />
           
