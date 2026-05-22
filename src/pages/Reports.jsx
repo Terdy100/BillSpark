@@ -193,7 +193,6 @@ export default function Reports() {
       </div>
     </div>
   );
-}
 
 function ReportStatCard({ title, value, change, positive, icon: Icon, color }) {
   const colors = {

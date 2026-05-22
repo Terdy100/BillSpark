@@ -16,32 +16,34 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // 1. Get available cameras
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length > 0) {
         setCameras(devices);
-        
-        // Refined iOS Camera Selection
-        // We want the "Main" camera. Labels like "Back Camera", "Camera 0", or "Triple Camera" (which handles switching)
-        const backCameras = devices.filter(d => /back|rear|environment/i.test(d.label));
-        
-        // Specifically look for labels that suggest the primary wide lens
-        let preferredBack = backCameras.find(d => 
-          /main|primary/i.test(d.label) || 
-          (/back/i.test(d.label) && !/ultra|tele|wide\s+camera\s+[1-9]/i.test(d.label.toLowerCase()))
-        );
-
-        // Fallback to first back camera if specific main not found
-        if (!preferredBack) preferredBack = backCameras[0];
-        
         const savedId = localStorage.getItem('billspark_camera_id');
-        const initialId = savedId || (preferredBack ? preferredBack.id : devices[0].id);
-        setCurrentCameraId(initialId);
+        
+        if (isIOS && !savedId) {
+          // OPTION 1: Let iOS Safari handle the lens selection natively
+          // Passing 'environment' instead of a hardcoded ID allows the iPhone to use its smart auto-switching
+          setCurrentCameraId('environment');
+        } else {
+          // Existing logic for Android or explicit saves
+          const backCameras = devices.filter(d => /back|rear|environment/i.test(d.label));
+          let preferredBack = backCameras.find(d => 
+            /main|primary/i.test(d.label) || 
+            (/back/i.test(d.label) && !/ultra|tele|wide\s+camera\s+[1-9]/i.test(d.label.toLowerCase()))
+          );
+          if (!preferredBack) preferredBack = backCameras[0];
+          setCurrentCameraId(savedId || (preferredBack ? preferredBack.id : devices[0].id));
+        }
       } else {
-        setInitError("No cameras found on this device.");
+        // Fallback blind start
+        setCurrentCameraId('environment');
       }
     }).catch(err => {
-      setInitError("Camera permission denied.");
+      // Force start attempt even if permission enumeration fails
+      setCurrentCameraId('environment');
     });
 
     return () => {
@@ -70,16 +72,18 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
       const config = {
-        fps: isIOS ? 20 : 25,
+        fps: isIOS ? 15 : 25, // Lowered to 15 on iOS for max stability and zero thermal lag
         qrbox: (viewfinderWidth, viewfinderHeight) => {
           // Wide and tall scanning area (60% of screen height)
           const width = Math.floor(viewfinderWidth * 0.90);
           const height = Math.floor(viewfinderHeight * 0.60);
           return { width, height };
         },
-        // Removed fixed aspectRatio to let Safari handle native sensor flow
         showTorchButtonIfSupported: true,
-        videoConstraints: {
+        // Strip strict resolution constraints entirely for iOS (Option 1)
+        videoConstraints: isIOS ? {
+          facingMode: 'environment'
+        } : {
           width: { min: 640, ideal: 1280 },
           height: { min: 480, ideal: 720 },
           facingMode: 'environment'
@@ -100,9 +104,11 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
         disableFlip: true
       };
 
+      const startTarget = cameraId === 'environment' ? { facingMode: "environment" } : cameraId;
+
       try {
         await html5QrCode.start(
-          cameraId,
+          startTarget,
           config,
           (text) => {
             onScan(text);
@@ -206,10 +212,10 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
           </div>
         </div>
         
-        {/* Viewport */}
-        <div className="w-full flex-1 bg-black relative flex items-center justify-center overflow-hidden">
-          {/* Main Scanner Div */}
-          <div id={containerId} className="w-full h-full flex items-center justify-center [&>video]:object-cover [&>video]:w-full [&>video]:h-full"></div>
+        {/* Viewport - fills all available space */}
+        <div className="w-full flex-1 bg-black relative overflow-hidden">
+          {/* Scanner div: absolutely fills the entire viewport area so the library centers the qrbox correctly */}
+          <div id={containerId} className="absolute inset-0"></div>
           
           {/* Zoom Controls */}
           {hasZoom && (
@@ -229,13 +235,12 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             </div>
           )}
 
-          {/* Alignment Guide (Minimalist Blue Only) */}
+          {/* Alignment Guide: visually matches the 90% x 60% qrbox, centered */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-[90%] h-[60%] relative overflow-hidden">
+            <div className="w-[90%] h-[60%] relative">
                {/* Scanning Line Animation */}
                <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
-               
-               {/* Corner accents (Blue only) */}
+               {/* Corner accents (Blue only - no borders/white lines) */}
                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
@@ -253,18 +258,19 @@ export default function BarcodeScanner({ onScan, onClose, title = "Scan Barcode"
             .animate-scan-line {
               animation: scan-line 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
             }
-            /* Force the video to fill the screen properly and fix the "Above center" offset */
+            /* Make the library's video fill the container naturally */
+            #${containerId} {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
             #${containerId} video {
               object-fit: cover !important;
               width: 100% !important;
               height: 100% !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              display: block !important;
-            }
-            /* Hide any text or buttons injected by the library that shift the video */
-            #${containerId} *:not(video):not(canvas) {
-              display: none !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
             }
           `}} />
           
